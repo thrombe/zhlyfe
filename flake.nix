@@ -21,25 +21,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
-
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    naersk = {
-      url = "github:nmattia/naersk";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    # a tui debugger (better rust support)
-    nnd = {
-      url = "github:al13n321/nnd/v0.23";
-      flake = false;
-    };
-
-    tracy = {
-      url = "github:wolfpld/tracy/v0.12.0";
-      flake = false;
-    };
   };
 
   outputs = inputs:
@@ -89,7 +70,6 @@
         rustc = rust-toolchain;
       };
       overlays = [
-        inputs.rust-overlay.overlays.default
         (self: super: rec {
           zig = zigv.bin;
           # zig = zigv.src;
@@ -104,16 +84,6 @@
               zig
             ];
           });
-
-          nnd = naersk-lib.buildPackage {
-            src = inputs.nnd;
-            CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
-          };
-
-          # tracy = super.tracy.overrideAttrs(old: {
-          #   version = "0.12.0";
-          #   src = inputs.tracy;
-          # });
         })
       ];
 
@@ -149,42 +119,15 @@
 
               # python-lsp-server # (lsp)
             ]))
-          uv # python package manager, virtualenv (rust)
-          # pylyzer # static type analyzer (rust)
-          pyright # lsp (js)
-          # basedpyright # lsp (js) (fork of pyright)
-          ruff # python linter, formatter (rust)
-
-          blender
-          godot_4
 
           pkg-config
           # curl
           fswatch
-          imagemagick
           glslang
           shaderc
           glfw
           portaudio
           wine64
-
-          SDL2
-          SDL2_ttf
-          glew
-          openal
-          curl
-          xorg.libX11.dev
-          xorg.libXcursor.dev
-          xorg.libXinerama.dev
-          xorg.libXrandr.dev
-          xorg.xinput
-          xorg.libXi.dev
-          libGLU.dev
-          mesa_glu.dev
-          cmake
-          ninja
-          zip
-          libraw
 
           vulkan-headers
           vulkan-validation-layers
@@ -202,13 +145,10 @@
 
           renderdoc
           gdb
-          nnd
           linuxKernel.packages.linux_zen.perf
           hotspot
           tracy
           libunwind.dev # optional for tracy
-          # cudaPackages.nsight_systems.bin # crashes :/
-          # - [Package request: nsight_graphics](https://github.com/NixOS/nixpkgs/issues/378135)
         ])
         ++ []
         ++ (custom-commands pkgs);
@@ -230,9 +170,6 @@
             export LD_LIBRARY_PATH=${pkgs.xorg.libX11}/lib:${pkgs.vulkan-loader}/lib:$LD_LIBRARY_PATH
 
             export CLANGD_FLAGS="--compile-commands-dir=$PROJECT_ROOT --query-driver=$(which $CXX)"
-
-            # if renderdoc does not work well on wayland
-            # export QT_QPA_PLATFORM=xcb
           '';
         };
     });
