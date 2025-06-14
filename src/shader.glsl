@@ -6,6 +6,14 @@
 layout(set = 0, binding = _bind_camera) uniform Ubo {
     Uniforms ubo;
 };
+layout(set = 0, binding = _bind_particles) bufffer ParticleBuffer {
+    // uhohh. steal some memory from particle buffer
+    GpuState state;
+    Particle particles[];
+};
+layout(set = 0, binding = _bind_particles_draw_call) bufffer ParticlesDrawCallBuffer {
+    DrawCall draw_call;
+};
 
 void set_seed(int id) {
     seed = int(ubo.frame.frame) ^ id ^ floatBitsToInt(ubo.frame.time);

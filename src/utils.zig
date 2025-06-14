@@ -1269,6 +1269,7 @@ pub const ShaderUtils = struct {
         height: i32,
         monitor_width: i32,
         monitor_height: i32,
+        pad0: u32 = 0,
     };
 
     // TODO: maybe enforce this

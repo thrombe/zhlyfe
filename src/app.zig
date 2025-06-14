@@ -27,6 +27,7 @@ const Swapchain = render_utils.Swapchain;
 const Buffer = render_utils.Buffer;
 const Image = render_utils.Image;
 const GraphicsPipeline = render_utils.GraphicsPipeline;
+const ComputePipeline = render_utils.ComputePipeline;
 const RenderPass = render_utils.RenderPass;
 const DescriptorPool = render_utils.DescriptorPool;
 const DescriptorSet = render_utils.DescriptorSet;
@@ -101,7 +102,7 @@ pub fn init(engine: *Engine) !@This() {
     });
     errdefer depth.deinit(device);
 
-    var resources = try ResourceManager.init(engine, cmd_pool);
+    var resources = try ResourceManager.init(engine, cmd_pool, .{});
     errdefer resources.deinit(device);
 
     var desc_pool = try DescriptorPool.new(device);
@@ -269,12 +270,18 @@ pub const ResourceManager = struct {
     uniform: Uniforms,
     uniform_buf: Buffer,
 
-    pub fn init(engine: *Engine, pool: vk.CommandPool) !@This() {
+    particles: Buffer,
+    // updated from gpu side
+    particles_draw_call_buf: Buffer,
+
+    pub fn init(engine: *Engine, pool: vk.CommandPool, v: struct {
+        num_particles: u32 = 5000,
+    }) !@This() {
+        const device = &engine.graphics.device;
+
         var uniform_buf = try Buffer.new_initialized(&engine.graphics, .{
             .size = @sizeOf(Uniforms),
-            .usage = .{
-                .uniform_buffer_bit = true,
-            },
+            .usage = .{ .uniform_buffer_bit = true },
             .memory_type = .{
                 // https://community.khronos.org/t/memory-type-practice-for-an-mvp-uniform-buffer/109458/7
                 // we ideally want device local for cpu to gpu, but instance transforms are not a bottleneck (generally)
@@ -286,16 +293,32 @@ pub const ResourceManager = struct {
             },
             .desc_type = .uniform_buffer,
         }, std.mem.zeroes(Uniforms), pool);
-        errdefer uniform_buf.deinit(&engine.graphics.device);
+        errdefer uniform_buf.deinit(device);
+
+        var particles = try Buffer.new(&engine.graphics, .{
+            .size = @sizeOf(Particle) * v.num_particles + 4 * 4 * 100, // some extra memory for gpu state
+            .usage = .{ .storage_buffer_bit = true },
+        });
+        errdefer particles.deinit(device);
+
+        var draw_call = try Buffer.new_initialized(&engine.graphics, .{
+            .size = 1,
+            .usage = .{ .storage_buffer_bit = true, .indirect_buffer_bit = true },
+        }, std.mem.zeroes(DrawCall), pool);
+        errdefer draw_call.deinit(device);
 
         return .{
             .uniform = std.mem.zeroes(Uniforms),
             .uniform_buf = uniform_buf,
+            .particles = particles,
+            .particles_draw_call_buf = draw_call,
         };
     }
 
     pub fn deinit(self: *@This(), device: *Device) void {
         self.uniform_buf.deinit(device);
+        self.particles_draw_call_buf.deinit(device);
+        self.particles.deinit(device);
     }
 
     pub fn add_binds(self: *@This(), builder: *render_utils.DescriptorSet.Builder) !void {
@@ -306,6 +329,8 @@ pub const ResourceManager = struct {
         }.func;
 
         try add_to_set(builder, &self.uniform_buf, .camera);
+        try add_to_set(builder, &self.particles_draw_call_buf, .particles_draw_call);
+        try add_to_set(builder, &self.particles, .particles);
     }
 
     pub fn update_uniforms(self: *@This(), device: *Device) !void {
@@ -319,11 +344,20 @@ pub const ResourceManager = struct {
 
     pub const UniformBinds = enum(u32) {
         camera,
+        particles_draw_call,
+        particles,
 
         pub fn bind(self: @This()) u32 {
             return @intFromEnum(self);
         }
     };
+    pub const Particle = extern struct {
+        pos_x: f32,
+        pos_y: f32,
+        color: u32,
+        _pad: u32 = 0,
+    };
+    pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
     pub const Uniforms = extern struct {
         camera: utils_mod.ShaderUtils.Camera2D,
@@ -332,7 +366,10 @@ pub const ResourceManager = struct {
         params: Params,
 
         const Params = extern struct {
-            _pad: f32 = 0,
+            particle_size: u32 = 16,
+            grid_size: u32 = 32,
+            zoom: f32 = 1.0,
+            spawn_count: u32,
         };
 
         fn from(
@@ -340,6 +377,11 @@ pub const ResourceManager = struct {
             window: *engine_mod.Window,
         ) !@This() {
             // const inputs = window.input();
+
+            const spawn_count = @min(state.spawn_count, 64);
+            state.spawn_count -= spawn_count;
+
+            state.params.spawn_count = spawn_count;
 
             const uniform = @This(){
                 .camera = .{
@@ -363,7 +405,7 @@ pub const ResourceManager = struct {
                     .monitor_width = @intCast(state.monitor_rez.width),
                     .monitor_height = @intCast(state.monitor_rez.height),
                 },
-                .params = .{},
+                .params = state.params,
             };
 
             return uniform;
@@ -385,10 +427,12 @@ pub const RendererState = struct {
     const Pipelines = struct {
         bg: GraphicsPipeline,
         render: GraphicsPipeline,
+        spawn_particles: ComputePipeline,
 
         fn deinit(self: *@This(), device: *Device) void {
             self.bg.deinit(device);
             self.render.deinit(device);
+            self.spawn_particles.deinit(device);
         }
     };
 
@@ -402,38 +446,41 @@ pub const RendererState = struct {
 
         var gen = try utils_mod.ShaderUtils.GlslBindingGenerator.init();
         defer gen.deinit();
+        try gen.add_struct("DrawCall", ResourceManager.DrawCall);
+        try gen.add_struct("Particle", ResourceManager.Particle);
         try gen.add_struct("Params", ResourceManager.Uniforms.Params);
         try gen.add_struct("Uniforms", ResourceManager.Uniforms);
         try gen.add_enum("_bind", ResourceManager.UniformBinds);
         try gen.dump_shader("src/uniforms.glsl");
 
         var shader_stages = std.ArrayList(utils_mod.ShaderCompiler.ShaderInfo).init(alloc);
+        const includes = try alloc.dupe([]const u8, &[_][]const u8{"src"});
         try shader_stages.append(.{
             .name = "bg_frag",
             .stage = .fragment,
             .path = "src/shader.glsl",
-            .include = try alloc.dupe([]const u8, &[_][]const u8{"src"}),
+            .include = includes,
             .define = try alloc.dupe([]const u8, &[_][]const u8{"BG_FRAG_PASS"}),
         });
         try shader_stages.append(.{
             .name = "bg_vert",
             .stage = .vertex,
             .path = "src/shader.glsl",
-            .include = try alloc.dupe([]const u8, &[_][]const u8{"src"}),
+            .include = includes,
             .define = try alloc.dupe([]const u8, &[_][]const u8{"BG_VERT_PASS"}),
         });
         try shader_stages.append(.{
             .name = "render_frag",
             .stage = .fragment,
             .path = "src/shader.glsl",
-            .include = try alloc.dupe([]const u8, &[_][]const u8{"src"}),
+            .include = includes,
             .define = try alloc.dupe([]const u8, &[_][]const u8{"RENDER_FRAG_PASS"}),
         });
         try shader_stages.append(.{
             .name = "render_vert",
             .stage = .vertex,
             .path = "src/shader.glsl",
-            .include = try alloc.dupe([]const u8, &[_][]const u8{"src"}),
+            .include = includes,
             .define = try alloc.dupe([]const u8, &[_][]const u8{"RENDER_VERT_PASS"}),
         });
 
@@ -503,9 +550,7 @@ pub const RendererState = struct {
                 .image_format = app.screen_image.format,
                 .depth_format = app.depth_image.format,
             },
-            .desc_set_layouts = &.{
-                desc_set.layout,
-            },
+            .desc_set_layouts = &.{desc_set.layout},
             .push_constant_ranges = &[_]vk.PushConstantRange{},
             .cull_mode = .{},
             .render_mode = .solid_triangles,
@@ -625,6 +670,9 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
+    spawn_count: u32 = 200,
+    params: ResourceManager.Uniforms.Params = .{ .spawn_count = 0 },
+
     // fn interpolated(self: *const @This(), lt: *const C.LastTransform, t: *const C.GlobalTransform) C.Transform {
     //     return lt.transform.lerp(&t.transform, self.ticker.simulation.interpolation_factor);
     // }
@@ -686,6 +734,7 @@ pub const AppState = struct {
 
         const window = engine.window;
 
+        const res = try window.get_res();
         var input = window.input();
 
         // local input tick
@@ -743,6 +792,8 @@ pub const AppState = struct {
                 mouse.dx = 0;
                 mouse.dy = 0;
             }
+            self.monitor_rez.width = res.width;
+            self.monitor_rez.height = res.height;
         }
     }
 
@@ -797,6 +848,9 @@ pub const GuiState = struct {
         var reset = false;
 
         _ = c.ImGui_SliderInt("FPS cap", @ptrCast(&state.fps_cap), 5, 500);
+        _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0, 100.0);
+        _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
+        _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
 
         var sim_speed = state.ticker.speed.perc;
         if (c.ImGui_SliderFloat("simulation_speed", @ptrCast(&sim_speed), 0.0, 5.0)) {
