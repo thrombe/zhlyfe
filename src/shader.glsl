@@ -44,10 +44,14 @@ void set_seed(int id) {
 #ifdef BG_FRAG_PASS
     layout(location = 0) out vec4 fcolor;
     void main() {
-        float y = gl_FragCoord.y/float(ubo.frame.height) - 0.5;
-        // y -= ubo.camera.fwd.y;
+      float zoom = 32.0;
+      float y = gl_FragCoord.y / zoom - 0.5 * zoom;
+      float x = gl_FragCoord.x / zoom - 0.5 * zoom;
 
-        vec3 color = mix(vec3(1.0, 0.6, 0.6), vec3(0.2, 0.2, 0.3), y * 0.5 + 0.5);
-        fcolor = vec4(color, 1.0);
+      vec2 squareCoord = vec2(floor(x), floor(y));
+      float checker = mod(floor(squareCoord.x) + floor(squareCoord.y), 2.0);
+
+      vec3 color = mix(vec3(0.2, 0.15, 0.35), vec3(0.25, 0.20, 0.40), checker);
+      fcolor = vec4(color, 1.0);
     }
 #endif // BG_FRAG_PASS
