@@ -62,6 +62,7 @@ const HotReloader = struct {
         errdefer allocator.free(hot_lib_src);
         try std.fs.copyFileAbsolute(hot_lib_src, hot_lib, .{});
 
+        std.debug.print("trying to hot load: {s}\n", .{hot_lib});
         var dyn = try std.DynLib.open(hot_lib);
         errdefer dyn.close();
 

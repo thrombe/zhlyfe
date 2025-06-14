@@ -467,15 +467,16 @@ fn step(b: *std.Build, v: struct {
             try steam_flags.append("-Wno-invalid-offsetof");
             try steam_flags.append("-Wgnu-alignof-expression");
             if (!is_windows) try steam_flags.appendSlice(strict_cxx_flags);
-            compile_step.addCSourceFiles(.{
-                .root = b.path("./src/steamworks"),
-                .files = &[_][]const u8{
-                    "steam.cpp",
-                    "server.cpp",
-                    "client.cpp",
-                },
-                .flags = try steam_flags.toOwnedSlice(),
-            });
+            // TODO: fix allocator dependency on zphysics alloc
+            // compile_step.addCSourceFiles(.{
+            //     .root = b.path("./src/steamworks"),
+            //     .files = &[_][]const u8{
+            //         "steam.cpp",
+            //         "server.cpp",
+            //         "client.cpp",
+            //     },
+            //     .flags = try steam_flags.toOwnedSlice(),
+            // });
 
             const files = b.addWriteFiles();
             compile_step.step.dependOn(&files.step);
@@ -506,16 +507,17 @@ fn step(b: *std.Build, v: struct {
                 \\
                 \\#include <stb_image_write.h>
             );
-            compile_step.addCSourceFiles(.{
-                .root = files.getDirectory(),
-                .files = &[_][]const u8{
-                    "stb_image.c",
-                },
-                .flags = &[_][]const u8{
-                    // we don't want a separate dll rn
-                    // if (is_windows) "-DSTBIDEF=" ++ win_export else "",
-                } ++ compile_commands_flags,
-            });
+            // TODO: fix allocator dependency on zphysics alloc
+            // compile_step.addCSourceFiles(.{
+            //     .root = files.getDirectory(),
+            //     .files = &[_][]const u8{
+            //         "stb_image.c",
+            //     },
+            //     .flags = &[_][]const u8{
+            //         // we don't want a separate dll rn
+            //         // if (is_windows) "-DSTBIDEF=" ++ win_export else "",
+            //     } ++ compile_commands_flags,
+            // });
 
             // compile_step.linkLibrary(v.cimgui);
             // compile_step.linkLibrary(v.jolt);
