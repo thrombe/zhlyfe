@@ -57,6 +57,22 @@ ivec3 to3D(int id, int side) {
     return pos;
 }
 
+uint rgba_encode_u32(vec4 color) {
+    uint r = uint(color.r * 255.0);
+    uint g = uint(color.g * 255.0);
+    uint b = uint(color.b * 255.0);
+    uint a = uint(color.a * 255.0);
+    return (a << 24) | (b << 16) | (g << 8) | r;
+}
+
+vec4 rgba_decode_u32(uint color) {
+    uint r = color & 0xFF;
+    uint g = (color >> 8) & 0xFF;
+    uint b = (color >> 16) & 0xFF;
+    uint a = (color >> 24) & 0xFF;
+    return vec4(float(r), float(g), float(b), float(a)) / 255.0;
+}
+
 vec3 reinhard_tonemap(vec3 x) {
     return x / (x + vec3(1.0));
 }

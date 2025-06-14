@@ -1218,14 +1218,16 @@ pub const CmdBuffer = struct {
                 @intCast(v.offsets.len),
                 v.offsets.ptr,
             );
-            device.cmdPushConstants(
-                cmdbuf,
-                v.pipeline.layout,
-                .{ .vertex_bit = true, .fragment_bit = true },
-                0,
-                @intCast(v.push_constants.len),
-                @ptrCast(v.push_constants.ptr),
-            );
+            if (v.push_constants.len > 0) {
+                device.cmdPushConstants(
+                    cmdbuf,
+                    v.pipeline.layout,
+                    .{ .vertex_bit = true, .fragment_bit = true },
+                    0,
+                    @intCast(v.push_constants.len),
+                    @ptrCast(v.push_constants.ptr),
+                );
+            }
             device.cmdDrawIndirect(
                 cmdbuf,
                 v.calls.buffer,

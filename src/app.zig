@@ -483,6 +483,13 @@ pub const RendererState = struct {
             .include = includes,
             .define = try alloc.dupe([]const u8, &[_][]const u8{"RENDER_VERT_PASS"}),
         });
+        try shader_stages.append(.{
+            .name = "spawn_particles",
+            .stage = .compute,
+            .path = "src/shader.glsl",
+            .include = includes,
+            .define = try alloc.dupe([]const u8, &[_][]const u8{ "SPAWN_PARTICLES_PASS", "COMPUTE_PASS" }),
+        });
 
         var stages = try ShaderStageManager.init(shader_stages.items);
         errdefer stages.deinit();
@@ -575,6 +582,14 @@ pub const RendererState = struct {
         });
 
         if (initialized) {
+            self.pipelines.spawn_particles.deinit(device);
+        }
+        self.pipelines.spawn_particles = try ComputePipeline.new(device, .{
+            .shader = self.stages.shaders.map.get("spawn_particles").?.code,
+            .desc_set_layouts = &.{desc_set.layout},
+        });
+
+        if (initialized) {
             self.descriptor_set.deinit(device);
         }
         self.descriptor_set = desc_set;
@@ -592,6 +607,22 @@ pub const RendererState = struct {
         errdefer cmdbuf.deinit(device);
 
         try cmdbuf.begin(device);
+
+        // spawn particles
+        cmdbuf.bindCompute(device, .{
+            .pipeline = self.pipelines.spawn_particles,
+            .desc_set = self.descriptor_set.set,
+        });
+        cmdbuf.dispatch(device, .{ .x = 1 });
+        cmdbuf.memBarrier(device, .{
+            .src = .{ .compute_shader_bit = true },
+            .dst = .{
+                .compute_shader_bit = true,
+                .fragment_shader_bit = true,
+                .vertex_input_bit = true,
+            },
+        });
+
         cmdbuf.dynamic_render_begin(device, .{
             .image = app.screen_image.view,
             .depth = app.depth_image.view,
@@ -604,6 +635,21 @@ pub const RendererState = struct {
             device.cmdBindDescriptorSets(buf, .graphics, self.pipelines.bg.layout, 0, 1, @ptrCast(&self.descriptor_set.set), 0, null);
             device.cmdDraw(buf, 6, 1, 0, 0);
         }
+
+        // render particles
+        cmdbuf.draw_indirect(device, .{
+            .pipeline = &self.pipelines.render,
+            .desc_sets = &.{
+                self.descriptor_set.set,
+            },
+            .offsets = &.{},
+            .calls = .{
+                .buffer = app.resources.particles_draw_call_buf.buffer,
+                .count = 1,
+                .stride = @sizeOf(ResourceManager.DrawCall),
+            },
+            .push_constants = &.{},
+        });
 
         cmdbuf.dynamic_render_end(device);
         cmdbuf.draw_into_swapchain(device, .{
