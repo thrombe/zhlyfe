@@ -894,7 +894,7 @@ pub const GuiState = struct {
         var reset = false;
 
         _ = c.ImGui_SliderInt("FPS cap", @ptrCast(&state.fps_cap), 5, 500);
-        _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0, 100.0);
+        _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0, 2.0);
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
 

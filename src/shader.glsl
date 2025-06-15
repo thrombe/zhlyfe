@@ -17,6 +17,14 @@ vec3 quad_verts[6] = vec3[6](
     vec3(-1.0, 1.0, 0.0),
     vec3(-1.0, -1.0, 0.0)
 );
+vec2 quad_uvs[6] = vec2[6](
+    vec2(1.0, 1.0),
+    vec2(0.0, 1.0),
+    vec2(1.0, 0.0),
+    vec2(1.0, 0.0),
+    vec2(0.0, 1.0),
+    vec2(0.0, 0.0)
+);
 
 #ifdef COMPUTE_PASS
     #define bufffer buffer
@@ -78,6 +86,8 @@ void set_seed(int id) {
 #endif // SPAWN_PARTICLES_PASS
 
 #ifdef RENDER_VERT_PASS
+    layout(location = 0) out vec4 vcolor;
+    layout(location = 1) out vec2 vuv;
     void main() {
         int instance_index = gl_VertexIndex / 6;
         int vert_index = gl_VertexIndex % 6;
@@ -90,39 +100,28 @@ void set_seed(int id) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        // vpos += 1.0;
-        vpos *= 0.5;
-        // vpos *= mres.y/mres.x;
-        // vpos *= mres / wres;
-        // vpos *= size;
-        // vpos.x *= wres.y / wres.x;
-        // vpos *= mres.y / wres.y;
-
-        // vpos *= 0.04;
-        // vpos.y *= mres.y/wres.y;
-        // vpos.x *= wres.x/mres.x;
-
         vec2 pos = vec2(instance.pos_x, instance.pos_y);
-        pos += vpos * particle_size;
-        // pos *= mres / wres;
-        // pos -= mres / 2.0;
-        // pos /= mres / 2.0;
-        pos /= mres;
-        pos *= mres/wres;
-        // pos += 0.5;
-        // pos *= mres.x / wres.x;
-        // pos *= mres.y/mres.x;
+        pos += vpos * 0.5 * particle_size;
+        pos /= mres; // world space to 0..1
+        pos *= mres/wres; // 0..1 scaled wrt window size
+        pos *= zoom;
         pos -= 0.5;
         pos *= 2.0;
-        pos *= zoom;
         gl_Position = vec4(pos, 0.0, 1.0);
+
+        vcolor = rgba_decode_u32(instance.color);
+        vuv = quad_uvs[vert_index];
     }
 #endif // RENDER_VERT_PASS
 
 #ifdef RENDER_FRAG_PASS
+    layout(location = 0) in vec4 vcolor;
+    layout(location = 1) in vec2 vuv;
     layout(location = 0) out vec4 fcolor;
     void main() {
-        fcolor = vec4(1.0);
+      float distanceFromCenter = length(vuv.xy - 0.5);
+      float mask = 0.5 - smoothstep(0.5, 0.45, distanceFromCenter);
+      fcolor = vec4(vec3(mask), vcolor.a * mask);
     }
 #endif // RENDER_FRAG_PASS
 
@@ -139,20 +138,19 @@ void set_seed(int id) {
 #ifdef BG_FRAG_PASS
     layout(location = 0) out vec4 fcolor;
     void main() {
-      float grid_size = ubo.params.grid_size;
-      float zoom = ubo.params.zoom;
-      float y = gl_FragCoord.y / grid_size;
-      float x = gl_FragCoord.x / grid_size;
+        float grid_size = ubo.params.grid_size;
+        float zoom = ubo.params.zoom;
+        vec2 resolution = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
+        float centerX = resolution.x / 2.0;
+        float centerY = resolution.y / 2.0;
 
-      vec2 squareCoord = vec2(floor(x), floor(y)) * zoom;
-      float checker = mod(floor(squareCoord.x) + floor(squareCoord.y), 2.0);
+        float y = (gl_FragCoord.y - centerY) / (grid_size * zoom) + centerY / (grid_size * zoom);
+        float x = (gl_FragCoord.x - centerX) / (grid_size * zoom) + centerX / (grid_size * zoom);
 
-      vec3 color = mix(vec3(0.2, 0.15, 0.35), vec3(0.25, 0.20, 0.40), checker);
-      // color = vec3(float(state.particle_count) / 500.0);
-      // color = vec3(draw_call.index_count > 0);
-      // color = vec3(ubo.params.spawn_count == 0);
-      // color = vec3(mod(ubo.frame.time, 1.0));
-      // color = color * 0.3;
-      fcolor = vec4(color, 1.0);
+        vec2 squareCoord = vec2(floor(x), floor(y));
+        float checker = mod(floor(squareCoord.x) + floor(squareCoord.y), 2.0);
+
+        vec3 color = mix(vec3(0.2, 0.15, 0.35), vec3(0.25, 0.20, 0.40), checker);
+        fcolor = vec4(color, 1.0);
     }
 #endif // BG_FRAG_PASS
