@@ -120,7 +120,7 @@ void set_seed(int id) {
     void main() {
       float distanceFromCenter = length(vuv.xy - 0.5);
       float mask = 1.0 - smoothstep(0.45, 0.5, distanceFromCenter);
-      fcolor = vec4(vcolor.xyz, vcolor.a * mask * 0.5);
+      fcolor = vec4(vcolor.xyz, vcolor.a * mask * 1.0);
     }
 #endif // RENDER_FRAG_PASS
 

@@ -849,9 +849,10 @@ pub const AppState = struct {
         }
 
         {
-            self.camera.eye.x += input.mouse.dx / self.params.zoom;
-            self.camera.eye.y += input.mouse.dy / self.params.zoom;
+            self.camera.eye.x += @as(f32, @floatCast(input.mouse.dx)) / self.params.zoom;
+            self.camera.eye.y += @as(f32, @floatCast(input.mouse.dy)) / self.params.zoom;
             self.camera.meta.did_move = @intCast(@intFromBool(@abs(input.mouse.dx) + @abs(input.mouse.dy) > 0.0001));
+            self.params.zoom += self.params.zoom * cast(f32, input.mouse.scroll.dy) / 10.0;
         }
     }
 
@@ -906,7 +907,8 @@ pub const GuiState = struct {
         var reset = false;
 
         _ = c.ImGui_SliderInt("FPS cap", @ptrCast(&state.fps_cap), 5, 500);
-        _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0, 2.0);
+        _ = c.ImGui_SliderInt("spawn count", @ptrCast(&state.spawn_count), 200, 10000);
+        _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0.001, 2.0);
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
 
