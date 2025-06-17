@@ -100,12 +100,13 @@ void set_seed(int id) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        vec2 pos = vec2(instance.pos_x, instance.pos_y);
+        vec2 pos = vec2(instance.pos_x, instance.pos_y) + ubo.camera.eye.xy;
+        // pos += wres/2.0;
         pos += vpos * 0.5 * particle_size;
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
         pos *= zoom;
-        pos -= 0.5;
+        // pos -= 0.5;
         pos *= 2.0;
         gl_Position = vec4(pos, 0.0, 1.0);
 
@@ -140,15 +141,18 @@ void set_seed(int id) {
     void main() {
         float grid_size = ubo.params.grid_size;
         float zoom = ubo.params.zoom;
-        vec2 resolution = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
-        float centerX = resolution.x / 2.0;
-        float centerY = resolution.y / 2.0;
+        vec2 eye = ubo.camera.eye.xy;
+        vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
+        vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        float y = (gl_FragCoord.y - centerY) / (grid_size * zoom) + centerY / (grid_size * zoom);
-        float x = (gl_FragCoord.x - centerX) / (grid_size * zoom) + centerX / (grid_size * zoom);
+        vec2 coord = gl_FragCoord.xy;
+        coord -= wres / 2.0;
+        coord /= zoom;
+        coord -= eye;
+        coord /= grid_size;
 
-        vec2 squareCoord = vec2(floor(x), floor(y));
-        float checker = mod(floor(squareCoord.x) + floor(squareCoord.y), 2.0);
+        vec2 rounded = vec2(floor(coord.x), floor(coord.y));
+        float checker = mod(floor(rounded.x) + floor(rounded.y), 2.0);
 
         vec3 color = mix(vec3(0.2, 0.15, 0.35), vec3(0.25, 0.20, 0.40), checker);
         fcolor = vec4(color, 1.0);

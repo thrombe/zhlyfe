@@ -384,12 +384,7 @@ pub const ResourceManager = struct {
             state.params.spawn_count = spawn_count;
 
             const uniform = @This(){
-                .camera = .{
-                    .eye = .{}, // 0, 0 for now. might be useful for panning later
-                    .meta = .{
-                        .did_move = 0,
-                    },
-                },
+                .camera = state.camera,
                 .mouse = .{
                     .x = state.mouse.x,
                     .y = state.mouse.y,
@@ -718,6 +713,7 @@ pub const AppState = struct {
 
     spawn_count: u32 = 200,
     params: ResourceManager.Uniforms.Params = .{ .spawn_count = 0 },
+    camera: ShaderUtils.Camera2D = .{ .eye = .{} },
 
     // fn interpolated(self: *const @This(), lt: *const C.LastTransform, t: *const C.GlobalTransform) C.Transform {
     //     return lt.transform.lerp(&t.transform, self.ticker.simulation.interpolation_factor);
@@ -834,12 +830,18 @@ pub const AppState = struct {
 
             self.frame += 1;
 
-            if (!self.focus) {
+            if (!mouse.left.pressed()) {
                 mouse.dx = 0;
                 mouse.dy = 0;
             }
             self.monitor_rez.width = res.width;
             self.monitor_rez.height = res.height;
+        }
+
+        {
+            self.camera.eye.x += input.mouse.dx / self.params.zoom;
+            self.camera.eye.y += input.mouse.dy / self.params.zoom;
+            self.camera.meta.did_move = @intCast(@intFromBool(@abs(input.mouse.dx) + @abs(input.mouse.dy) > 0.0001));
         }
     }
 

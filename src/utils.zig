@@ -1238,7 +1238,7 @@ pub const ShaderUtils = struct {
     pub const Mouse = extern struct { x: i32, y: i32, left: u32, right: u32 };
     pub const Camera2D = extern struct {
         eye: Vec4, // vec2 aligned
-        meta: CameraMeta,
+        meta: CameraMeta = .{},
 
         pub const CameraMeta = extern struct {
             did_move: u32 = 0,
@@ -1252,7 +1252,7 @@ pub const ShaderUtils = struct {
         fwd: Vec3,
         right: Vec3,
         up: Vec3,
-        meta: CameraMeta,
+        meta: CameraMeta = .{},
 
         pub const CameraMeta = extern struct {
             did_change: u32 = 0,
