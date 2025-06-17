@@ -58,12 +58,6 @@ void set_seed(int id) {
             return;
         }
 
-        if (id == 0 && ubo.frame.frame == 1) {
-            atomicExchange(state.particle_count, -1);
-        }
-
-        memoryBarrierBuffer();
-
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         int index = atomicAdd(state.particle_count, 1);
         particles[index].pos_x = random() * mres.x;
