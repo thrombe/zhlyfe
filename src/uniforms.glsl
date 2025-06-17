@@ -11,15 +11,23 @@
  struct Particle {
      float pos_x;
      float pos_y;
+     float vel_x;
+     float vel_y;
      uint color;
-     uint _pad;
+     uint _pad0;
+     uint _pad1;
+     uint _pad2;
  };
 
  struct Params {
      uint particle_size;
      uint grid_size;
      float zoom;
+     float friction;
+     uint particle_count;
      uint spawn_count;
+     uint _pad0;
+     uint _pad1;
  };
 
  struct Camera2DMeta {

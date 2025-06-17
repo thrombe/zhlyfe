@@ -354,8 +354,13 @@ pub const ResourceManager = struct {
     pub const Particle = extern struct {
         pos_x: f32,
         pos_y: f32,
+        vel_x: f32,
+        vel_y: f32,
         color: u32,
-        _pad: u32 = 0,
+
+        _pad0: u32 = 0,
+        _pad1: u32 = 0,
+        _pad2: u32 = 0,
     };
     pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
@@ -369,7 +374,13 @@ pub const ResourceManager = struct {
             particle_size: u32 = 16,
             grid_size: u32 = 32,
             zoom: f32 = 1.0,
+            friction: f32,
+            particle_count: u32 = 0,
             spawn_count: u32,
+
+            _pad0: u32 = 0,
+            _pad1: u32 = 0,
+            // _pad2: u32 = 0,
         };
 
         fn from(
@@ -382,6 +393,8 @@ pub const ResourceManager = struct {
             state.spawn_count -= spawn_count;
 
             state.params.spawn_count = spawn_count;
+            state.params.particle_count += spawn_count;
+            state.params.friction = @exp(-state.friction * state.ticker.scaled.delta);
 
             const uniform = @This(){
                 .camera = state.camera,
@@ -423,11 +436,13 @@ pub const RendererState = struct {
         bg: GraphicsPipeline,
         render: GraphicsPipeline,
         spawn_particles: ComputePipeline,
+        tick_particles: ComputePipeline,
 
         fn deinit(self: *@This(), device: *Device) void {
             self.bg.deinit(device);
             self.render.deinit(device);
             self.spawn_particles.deinit(device);
+            self.tick_particles.deinit(device);
         }
     };
 
@@ -484,6 +499,13 @@ pub const RendererState = struct {
             .path = "src/shader.glsl",
             .include = includes,
             .define = try alloc.dupe([]const u8, &[_][]const u8{ "SPAWN_PARTICLES_PASS", "COMPUTE_PASS" }),
+        });
+        try shader_stages.append(.{
+            .name = "tick_particles",
+            .stage = .compute,
+            .path = "src/shader.glsl",
+            .include = includes,
+            .define = try alloc.dupe([]const u8, &[_][]const u8{ "TICK_PARTICLES_PASS", "COMPUTE_PASS" }),
         });
 
         var stages = try ShaderStageManager.init(shader_stages.items);
@@ -595,13 +617,20 @@ pub const RendererState = struct {
         });
 
         if (initialized) {
+            self.pipelines.tick_particles.deinit(device);
+        }
+        self.pipelines.tick_particles = try ComputePipeline.new(device, .{
+            .shader = self.stages.shaders.map.get("tick_particles").?.code,
+            .desc_set_layouts = &.{desc_set.layout},
+        });
+
+        if (initialized) {
             self.descriptor_set.deinit(device);
         }
         self.descriptor_set = desc_set;
     }
 
     pub fn create_cmdbuf(self: *@This(), engine: *Engine, app: *App, app_state: *AppState) !CmdBuffer {
-        _ = app_state;
         const ctx = &engine.graphics;
         const device = &ctx.device;
 
@@ -619,6 +648,17 @@ pub const RendererState = struct {
             .desc_set = self.descriptor_set.set,
         });
         cmdbuf.dispatch(device, .{ .x = 1 });
+        cmdbuf.memBarrier(device, .{
+            .src = .{ .compute_shader_bit = true },
+            .dst = .{ .compute_shader_bit = true },
+        });
+
+        // tick particles
+        cmdbuf.bindCompute(device, .{
+            .pipeline = self.pipelines.tick_particles,
+            .desc_set = self.descriptor_set.set,
+        });
+        cmdbuf.dispatch(device, .{ .x = app_state.params.particle_count / 64 + @as(u32, @intFromBool(app_state.params.particle_count % 64 > 0)) });
         cmdbuf.memBarrier(device, .{
             .src = .{ .compute_shader_bit = true },
             .dst = .{
@@ -721,8 +761,9 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
-    spawn_count: u32 = 200,
-    params: ResourceManager.Uniforms.Params = .{ .spawn_count = 0 },
+    spawn_count: u32 = 0,
+    friction: f32 = 0,
+    params: ResourceManager.Uniforms.Params = .{ .spawn_count = 0, .friction = 0 },
     camera: ShaderUtils.Camera2D = .{ .eye = .{} },
 
     // fn interpolated(self: *const @This(), lt: *const C.LastTransform, t: *const C.GlobalTransform) C.Transform {
@@ -907,10 +948,11 @@ pub const GuiState = struct {
         var reset = false;
 
         _ = c.ImGui_SliderInt("FPS cap", @ptrCast(&state.fps_cap), 5, 500);
-        _ = c.ImGui_SliderInt("spawn count", @ptrCast(&state.spawn_count), 200, 10000);
+        _ = c.ImGui_SliderInt("spawn count", @ptrCast(&state.spawn_count), 0, 10000);
         _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0.001, 2.0);
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
+        _ = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 1.0);
 
         var sim_speed = state.ticker.speed.perc;
         if (c.ImGui_SliderFloat("simulation_speed", @ptrCast(&sim_speed), 0.0, 5.0)) {

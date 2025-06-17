@@ -6,6 +6,9 @@
 struct GpuState {
     int particle_count;
 
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
     vec4 _pad_aligned;
 };
 
@@ -62,6 +65,8 @@ void set_seed(int id) {
         int index = atomicAdd(state.particle_count, 1);
         particles[index].pos_x = random() * mres.x;
         particles[index].pos_y = random() * mres.y;
+        particles[index].vel_x = 50.0 * (random() - 0.5) * 2.0;
+        particles[index].vel_y = 50.0 * (random() - 0.5) * 2.0;
         particles[index].color = rgba_encode_u32(vec4(random(), random(), random(), 1.0));
 
         if (id > 0) {
@@ -78,6 +83,45 @@ void set_seed(int id) {
         draw_call.first_instance = 0;
     }
 #endif // SPAWN_PARTICLES_PASS
+
+#ifdef TICK_PARTICLES_PASS
+    layout (local_size_x = 8, local_size_y = 8) in;
+    void main() {
+        int id = global_id;
+        set_seed(id);
+
+        if (id >= state.particle_count) {
+            return;
+        }
+
+        Particle p = particles[id];
+
+        p.vel_x *= ubo.params.friction;
+        p.vel_y *= ubo.params.friction;
+
+        p.pos_x += p.vel_x * ubo.frame.deltatime;
+        p.pos_y += p.vel_y * ubo.frame.deltatime;
+
+        if (p.pos_x < 0) {
+            p.pos_x = 0;
+            p.vel_x *= -1.0;
+        }
+        if (p.pos_y < 0) {
+            p.pos_y = 0;
+            p.vel_y *= -1.0;
+        }
+        if (p.pos_x > ubo.frame.monitor_width) {
+            p.pos_x = ubo.frame.monitor_width;
+            p.vel_x *= -1.0;
+        }
+        if (p.pos_y > ubo.frame.monitor_height) {
+            p.pos_y = ubo.frame.monitor_height;
+            p.vel_y *= -1.0;
+        }
+
+        particles[id] = p;
+    }
+#endif // TICK_PARTICLES_PASS
 
 #ifdef RENDER_VERT_PASS
     layout(location = 0) out vec4 vcolor;
@@ -114,7 +158,8 @@ void set_seed(int id) {
     void main() {
       float distanceFromCenter = length(vuv.xy - 0.5);
       float mask = 1.0 - smoothstep(0.45, 0.5, distanceFromCenter);
-      fcolor = vec4(vcolor.xyz, vcolor.a * mask * 1.0);
+      // mask = pow(1.0 - distanceFromCenter, 4.5) * mask;
+      fcolor = vec4(vec3(0.2, vcolor.y, vcolor.z), vcolor.a * mask * 0.7);
     }
 #endif // RENDER_FRAG_PASS
 
