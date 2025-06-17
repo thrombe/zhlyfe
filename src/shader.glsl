@@ -101,12 +101,10 @@ void set_seed(int id) {
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
         vec2 pos = vec2(instance.pos_x, instance.pos_y) + ubo.camera.eye.xy;
-        // pos += wres/2.0;
         pos += vpos * 0.5 * particle_size;
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
         pos *= zoom;
-        // pos -= 0.5;
         pos *= 2.0;
         gl_Position = vec4(pos, 0.0, 1.0);
 
@@ -121,8 +119,8 @@ void set_seed(int id) {
     layout(location = 0) out vec4 fcolor;
     void main() {
       float distanceFromCenter = length(vuv.xy - 0.5);
-      float mask = 0.5 - smoothstep(0.5, 0.45, distanceFromCenter);
-      fcolor = vec4(vec3(mask), vcolor.a * mask);
+      float mask = 1.0 - smoothstep(0.45, 0.5, distanceFromCenter);
+      fcolor = vec4(vcolor.xyz, vcolor.a * mask * 0.5);
     }
 #endif // RENDER_FRAG_PASS
 

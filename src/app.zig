@@ -574,6 +574,16 @@ pub const RendererState = struct {
             .push_constant_ranges = &[_]vk.PushConstantRange{},
             .cull_mode = .{},
             .render_mode = .solid_triangles,
+            .alpha_blend = .{
+                .blend_enable = vk.TRUE,
+                .src_color_blend_factor = .src_alpha,
+                .dst_color_blend_factor = .one_minus_src_alpha,
+                .color_blend_op = .add,
+                .src_alpha_blend_factor = .one,
+                .dst_alpha_blend_factor = .zero,
+                .alpha_blend_op = .add,
+                .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+            },
         });
 
         if (initialized) {

@@ -198,6 +198,16 @@ pub const GraphicsPipeline = struct {
         pass: ?vk.RenderPass = null,
         desc_set_layouts: []const vk.DescriptorSetLayout,
         push_constant_ranges: []const vk.PushConstantRange,
+        alpha_blend: vk.PipelineColorBlendAttachmentState = .{
+            .blend_enable = vk.FALSE,
+            .src_color_blend_factor = .one,
+            .dst_color_blend_factor = .zero,
+            .color_blend_op = .add,
+            .src_alpha_blend_factor = .one,
+            .dst_alpha_blend_factor = .zero,
+            .alpha_blend_op = .add,
+            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+        },
         cull_mode: vk.CullModeFlags = .{ .back_bit = true },
         render_mode: RenderMode = .solid_triangles,
     };
@@ -302,16 +312,7 @@ pub const GraphicsPipeline = struct {
             .alpha_to_one_enable = vk.FALSE,
         };
 
-        const pcbas = vk.PipelineColorBlendAttachmentState{
-            .blend_enable = vk.FALSE,
-            .src_color_blend_factor = .one,
-            .dst_color_blend_factor = .zero,
-            .color_blend_op = .add,
-            .src_alpha_blend_factor = .one,
-            .dst_alpha_blend_factor = .zero,
-            .alpha_blend_op = .add,
-            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
-        };
+        const pcbas = v.alpha_blend;
 
         const pcbsci = vk.PipelineColorBlendStateCreateInfo{
             .logic_op_enable = vk.FALSE,
@@ -329,7 +330,7 @@ pub const GraphicsPipeline = struct {
         };
 
         const depth_stencil_info = vk.PipelineDepthStencilStateCreateInfo{
-            .depth_test_enable = vk.TRUE,
+            .depth_test_enable = vk.FALSE,
             .depth_write_enable = vk.TRUE,
             .depth_compare_op = .less,
             .depth_bounds_test_enable = vk.FALSE,
