@@ -396,6 +396,8 @@ pub const ResourceManager = struct {
             state.params.particle_count += spawn_count;
             state.params.friction = @exp(-state.friction * state.ticker.scaled.delta);
 
+            if (spawn_count > 0) _ = state.cmdbuf_fuse.fuse();
+
             const uniform = @This(){
                 .camera = state.camera,
                 .mouse = .{
@@ -948,11 +950,11 @@ pub const GuiState = struct {
         var reset = false;
 
         _ = c.ImGui_SliderInt("FPS cap", @ptrCast(&state.fps_cap), 5, 500);
-        _ = c.ImGui_SliderInt("spawn count", @ptrCast(&state.spawn_count), 0, 10000);
+        reset = c.ImGui_SliderInt("spawn count", @ptrCast(&state.spawn_count), 0, 10000) or reset;
         _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0.001, 2.0);
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
-        _ = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 1.0);
+        reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 1.0) or reset;
 
         var sim_speed = state.ticker.speed.perc;
         if (c.ImGui_SliderFloat("simulation_speed", @ptrCast(&sim_speed), 0.0, 5.0)) {
@@ -960,7 +962,6 @@ pub const GuiState = struct {
             state.ticker.drop_pending_simtime();
         }
 
-        // 'or' short circuits :/
         reset = c.ImGui_Button("Reset render state") or reset;
 
         c.ImGui_Text("scaled time: %.3f", state.ticker.scaled.time_f);
