@@ -156,10 +156,11 @@ void set_seed(int id) {
     layout(location = 1) in vec2 vuv;
     layout(location = 0) out vec4 fcolor;
     void main() {
-      float distanceFromCenter = length(vuv.xy - 0.5);
-      float mask = 1.0 - smoothstep(0.45, 0.5, distanceFromCenter);
-      // mask = pow(1.0 - distanceFromCenter, 4.5) * mask;
-      fcolor = vec4(vec3(0.2, vcolor.y, vcolor.z), vcolor.a * mask * 0.7);
+        float zoom = ubo.params.zoom;
+        float distanceFromCenter = length(vuv.xy - 0.5);
+        float mask = 1.0 - smoothstep(0.5 - 0.1/zoom, 0.5, distanceFromCenter);
+        // mask = pow(1.0 - distanceFromCenter, 4.5) * mask;
+        fcolor = vec4(vec3(0.2, vcolor.y, vcolor.z), vcolor.a * mask * 0.7);
     }
 #endif // RENDER_FRAG_PASS
 
