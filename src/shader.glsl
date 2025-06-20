@@ -97,22 +97,17 @@ void set_seed(int id) {
         p.vel *= ubo.params.friction;
         p.pos += p.vel * ubo.frame.deltatime;
 
-
         if (p.pos.x < 0) {
-            p.pos.x = 0;
-            p.vel.x *= -1.0;
+            p.pos.x = float(ubo.frame.monitor_width);
         }
         if (p.pos.y < 0) {
-            p.pos.y = 0;
-            p.vel.y *= -1.0;
+            p.pos.y = float(ubo.frame.monitor_height);
         }
         if (p.pos.x > ubo.frame.monitor_width) {
-            p.pos.x = ubo.frame.monitor_width;
-            p.vel.x *= -1.0;
+            p.pos.x = 0;
         }
         if (p.pos.y > ubo.frame.monitor_height) {
-            p.pos.y = ubo.frame.monitor_height;
-            p.vel.y *= -1.0;
+            p.pos.y = 0;
         }
 
         particles[id] = p;
