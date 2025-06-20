@@ -352,10 +352,8 @@ pub const ResourceManager = struct {
         }
     };
     pub const Particle = extern struct {
-        pos_x: f32,
-        pos_y: f32,
-        vel_x: f32,
-        vel_y: f32,
+        pos: math.Vec2,
+        vel: math.Vec2,
         color: u32,
 
         _pad0: u32 = 0,

@@ -441,6 +441,11 @@ pub const Vec3 = extern struct {
     }
 };
 
+pub const Vec2 = extern struct {
+    x: f32,
+    y: f32,
+};
+
 // - [Matrix storage](https://github.com/hexops/machengine.org/blob/0aab00137dc3d1098e5237e2bee124e0ef9fbc17/content/docs/math/matrix-storage.md)
 // vulkan wants | V1, V2, V3, V4 | (columns contiguous in memory).
 // so we need to store matrix in transposed form

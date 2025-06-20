@@ -9,10 +9,8 @@
  };
 
  struct Particle {
-     float pos_x;
-     float pos_y;
-     float vel_x;
-     float vel_y;
+     vec2 pos;
+     vec2 vel;
      uint color;
      uint _pad0;
      uint _pad1;

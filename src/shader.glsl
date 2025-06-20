@@ -63,10 +63,8 @@ void set_seed(int id) {
 
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         int index = atomicAdd(state.particle_count, 1);
-        particles[index].pos_x = random() * mres.x;
-        particles[index].pos_y = random() * mres.y;
-        particles[index].vel_x = 50.0 * (random() - 0.5) * 2.0;
-        particles[index].vel_y = 50.0 * (random() - 0.5) * 2.0;
+        particles[index].pos = vec2(random(), random()) * mres;
+        particles[index].vel = 50.0 * (vec2(random(), random()) - 0.5) * 2.0;
         particles[index].color = rgba_encode_u32(vec4(random(), random(), random(), 1.0));
 
         if (id > 0) {
@@ -96,27 +94,25 @@ void set_seed(int id) {
 
         Particle p = particles[id];
 
-        p.vel_x *= ubo.params.friction;
-        p.vel_y *= ubo.params.friction;
+        p.vel *= ubo.params.friction;
+        p.pos += p.vel * ubo.frame.deltatime;
 
-        p.pos_x += p.vel_x * ubo.frame.deltatime;
-        p.pos_y += p.vel_y * ubo.frame.deltatime;
 
-        if (p.pos_x < 0) {
-            p.pos_x = 0;
-            p.vel_x *= -1.0;
+        if (p.pos.x < 0) {
+            p.pos.x = 0;
+            p.vel.x *= -1.0;
         }
-        if (p.pos_y < 0) {
-            p.pos_y = 0;
-            p.vel_y *= -1.0;
+        if (p.pos.y < 0) {
+            p.pos.y = 0;
+            p.vel.y *= -1.0;
         }
-        if (p.pos_x > ubo.frame.monitor_width) {
-            p.pos_x = ubo.frame.monitor_width;
-            p.vel_x *= -1.0;
+        if (p.pos.x > ubo.frame.monitor_width) {
+            p.pos.x = ubo.frame.monitor_width;
+            p.vel.x *= -1.0;
         }
-        if (p.pos_y > ubo.frame.monitor_height) {
-            p.pos_y = ubo.frame.monitor_height;
-            p.vel_y *= -1.0;
+        if (p.pos.y > ubo.frame.monitor_height) {
+            p.pos.y = ubo.frame.monitor_height;
+            p.vel.y *= -1.0;
         }
 
         particles[id] = p;
@@ -138,7 +134,7 @@ void set_seed(int id) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        vec2 pos = vec2(instance.pos_x, instance.pos_y) + ubo.camera.eye.xy;
+        vec2 pos = instance.pos + ubo.camera.eye.xy;
         pos += vpos * 0.5 * particle_size;
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
