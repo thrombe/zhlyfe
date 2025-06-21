@@ -33,7 +33,10 @@
  };
 
  struct PushConstants {
-     uint reduce_step;
+     int reduce_step;
+     uint _pad0;
+     uint _pad1;
+     uint _pad2;
  };
 
  struct Camera2DMeta {
@@ -78,5 +81,6 @@
  const int _bind_scratch = 2;
  const int _bind_particles_back = 3;
  const int _bind_particles = 4;
- const int _bind_particle_bins = 5;
+ const int _bind_particle_bins_back = 5;
+ const int _bind_particle_bins = 6;
 

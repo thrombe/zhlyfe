@@ -1200,14 +1200,14 @@ pub const CmdBuffer = struct {
         v: struct {
             pipeline: *const GraphicsPipeline,
             desc_sets: []const vk.DescriptorSet,
-            offsets: []const u32,
+            offsets: []const u32 = &.{},
             calls: struct {
                 buffer: vk.Buffer,
                 count: u32,
                 stride: u32,
                 offset: u32 = 0,
             },
-            push_constants: []const u8,
+            push_constants: []const u8 = &.{},
         },
     ) void {
         for (self.bufs) |cmdbuf| {

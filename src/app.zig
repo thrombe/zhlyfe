@@ -273,6 +273,7 @@ pub const ResourceManager = struct {
     scratch: Buffer,
     particles_back: Buffer,
     particles: Buffer,
+    particle_bins_back: Buffer,
     particle_bins: Buffer,
     // updated from gpu side
     particles_draw_call_buf: Buffer,
@@ -312,6 +313,12 @@ pub const ResourceManager = struct {
         errdefer particles.deinit(device);
 
         const res = try engine.window.get_res();
+        var particle_bins_back = try Buffer.new(ctx, .{
+            .size = @sizeOf(i32) * res.width * res.height,
+            .usage = .{ .storage_buffer_bit = true },
+        });
+        errdefer particle_bins_back.deinit(device);
+
         var particle_bins = try Buffer.new(ctx, .{
             .size = @sizeOf(i32) * res.width * res.height,
             .usage = .{ .storage_buffer_bit = true },
@@ -337,6 +344,7 @@ pub const ResourceManager = struct {
             .scratch = scratch,
             .particles_back = particles_back,
             .particles = particles,
+            .particle_bins_back = particle_bins_back,
             .particle_bins = particle_bins,
         };
     }
@@ -347,6 +355,7 @@ pub const ResourceManager = struct {
         self.scratch.deinit(device);
         self.particles_back.deinit(device);
         self.particles.deinit(device);
+        self.particle_bins_back.deinit(device);
         self.particle_bins.deinit(device);
     }
 
@@ -362,6 +371,7 @@ pub const ResourceManager = struct {
         try add_to_set(builder, &self.scratch, .scratch);
         try add_to_set(builder, &self.particles_back, .particles_back);
         try add_to_set(builder, &self.particles, .particles);
+        try add_to_set(builder, &self.particle_bins_back, .particle_bins_back);
         try add_to_set(builder, &self.particle_bins, .particle_bins);
 
         try add_to_set(builder_back, &self.uniform_buf, .camera);
@@ -369,6 +379,7 @@ pub const ResourceManager = struct {
         try add_to_set(builder_back, &self.scratch, .scratch);
         try add_to_set(builder_back, &self.particles, .particles_back);
         try add_to_set(builder_back, &self.particles_back, .particles);
+        try add_to_set(builder_back, &self.particle_bins_back, .particle_bins_back);
         try add_to_set(builder_back, &self.particle_bins, .particle_bins);
     }
 
@@ -387,6 +398,7 @@ pub const ResourceManager = struct {
         scratch,
         particles_back,
         particles,
+        particle_bins_back,
         particle_bins,
 
         pub fn bind(self: @This()) u32 {
@@ -406,6 +418,10 @@ pub const ResourceManager = struct {
 
     pub const PushConstants = extern struct {
         reduce_step: i32,
+
+        _pad0: u32 = 0,
+        _pad1: u32 = 0,
+        _pad2: u32 = 0,
     };
 
     pub const Uniforms = extern struct {
@@ -739,14 +755,13 @@ pub const RendererState = struct {
         self.pipelines.bin_prefix_sum = try ComputePipeline.new(device, .{
             .shader = self.stages.shaders.map.get("bin_prefix_sum").?.code,
             .desc_set_layouts = &.{desc_set.layout},
-            .push_constant_ranges = &[_]vk.PushConstantRange{.{
-                .stage_flags = .{
-                    .vertex_bit = true,
-                    .fragment_bit = true,
-                },
-                .offset = 0,
-                .size = @sizeOf(ResourceManager.PushConstants),
-            }},
+            // .push_constant_ranges = &[_]vk.PushConstantRange{.{
+            //     .stage_flags = .{
+            //         .compute_bit = true,
+            //     },
+            //     .offset = 0,
+            //     .size = @sizeOf(ResourceManager.PushConstants),
+            // }},
         });
 
         if (initialized) {
@@ -778,8 +793,9 @@ pub const RendererState = struct {
         const device = &ctx.device;
 
         const alloc = app_state.arena.allocator();
+        _ = alloc;
 
-        std.mem.swap(&self.descriptor_set, &self.descriptor_set_back);
+        std.mem.swap(DescriptorSet, &self.descriptor_set, &self.descriptor_set_back);
 
         var cmdbuf = try CmdBuffer.init(device, .{
             .pool = app.command_pool,
@@ -828,22 +844,22 @@ pub const RendererState = struct {
             .desc_set = self.descriptor_set.set,
         });
         var bin_buf_size = app_state.params.bin_buf_size;
-        var reduce_step: u32 = 0;
+        var reduce_step: i32 = 0;
         while (bin_buf_size >= 1) {
             // TODO: oof. don't use arena allocator. somehow retain this memory somewhere.
-            const constants = try alloc.create(ResourceManager.PushConstants);
-            constants.* = .{ .reduce_step = reduce_step };
-            cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants));
-            cmdbuf.dispatch(device, .{ .x = cast(u32, math.divide_roof(bin_buf_size, 64)) });
+            // const constants = try alloc.create(ResourceManager.PushConstants);
+            // constants.* = .{ .reduce_step = reduce_step };
+            // cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants));
+            cmdbuf.dispatch(device, .{ .x = cast(u32, bin_buf_size) });
             cmdbuf.memBarrier(device, .{
                 .src = .{ .compute_shader_bit = true },
                 .dst = .{ .compute_shader_bit = true },
             });
 
-            if (bin_buf_size > 1) {
+            if (bin_buf_size == 1) {
                 break;
             }
-            bin_buf_size = math.divide_roof(bin_buf_size, 64);
+            bin_buf_size = math.divide_roof(bin_buf_size, 2);
             reduce_step += 1;
         }
 
@@ -892,13 +908,11 @@ pub const RendererState = struct {
             .desc_sets = &.{
                 self.descriptor_set.set,
             },
-            .offsets = &.{},
             .calls = .{
                 .buffer = app.resources.particles_draw_call_buf.buffer,
                 .count = 1,
                 .stride = @sizeOf(ResourceManager.DrawCall),
             },
-            .push_constants = &.{},
         });
 
         cmdbuf.dynamic_render_end(device);
