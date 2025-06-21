@@ -270,16 +270,20 @@ pub const ResourceManager = struct {
     uniform: Uniforms,
     uniform_buf: Buffer,
 
+    scratch: Buffer,
+    particles_back: Buffer,
     particles: Buffer,
+    particle_bins: Buffer,
     // updated from gpu side
     particles_draw_call_buf: Buffer,
 
     pub fn init(engine: *Engine, pool: vk.CommandPool, v: struct {
         num_particles: u32 = 5000,
     }) !@This() {
-        const device = &engine.graphics.device;
+        const ctx = &engine.graphics;
+        const device = &ctx.device;
 
-        var uniform_buf = try Buffer.new_initialized(&engine.graphics, .{
+        var uniform_buf = try Buffer.new_initialized(ctx, .{
             .size = @sizeOf(Uniforms),
             .usage = .{ .uniform_buffer_bit = true },
             .memory_type = .{
@@ -295,13 +299,32 @@ pub const ResourceManager = struct {
         }, std.mem.zeroes(Uniforms), pool);
         errdefer uniform_buf.deinit(device);
 
-        var particles = try Buffer.new(&engine.graphics, .{
-            .size = @sizeOf(Particle) * v.num_particles + 4 * 4 * 100, // some extra memory for gpu state
+        var particles_back = try Buffer.new(ctx, .{
+            .size = @sizeOf(Particle) * v.num_particles,
+            .usage = .{ .storage_buffer_bit = true },
+        });
+        errdefer particles_back.deinit(device);
+
+        var particles = try Buffer.new(ctx, .{
+            .size = @sizeOf(Particle) * v.num_particles,
             .usage = .{ .storage_buffer_bit = true },
         });
         errdefer particles.deinit(device);
 
-        var draw_call = try Buffer.new_initialized(&engine.graphics, .{
+        const res = try engine.window.get_res();
+        var particle_bins = try Buffer.new(ctx, .{
+            .size = @sizeOf(i32) * res.width * res.height,
+            .usage = .{ .storage_buffer_bit = true },
+        });
+        errdefer particle_bins.deinit(device);
+
+        var scratch = try Buffer.new(ctx, .{
+            .size = 4 * 4 * 100,
+            .usage = .{ .storage_buffer_bit = true },
+        });
+        errdefer scratch.deinit(device);
+
+        var draw_call = try Buffer.new_initialized(ctx, .{
             .size = 1,
             .usage = .{ .storage_buffer_bit = true, .indirect_buffer_bit = true },
         }, std.mem.zeroes(DrawCall), pool);
@@ -310,18 +333,24 @@ pub const ResourceManager = struct {
         return .{
             .uniform = std.mem.zeroes(Uniforms),
             .uniform_buf = uniform_buf,
-            .particles = particles,
             .particles_draw_call_buf = draw_call,
+            .scratch = scratch,
+            .particles_back = particles_back,
+            .particles = particles,
+            .particle_bins = particle_bins,
         };
     }
 
     pub fn deinit(self: *@This(), device: *Device) void {
         self.uniform_buf.deinit(device);
         self.particles_draw_call_buf.deinit(device);
+        self.scratch.deinit(device);
+        self.particles_back.deinit(device);
         self.particles.deinit(device);
+        self.particle_bins.deinit(device);
     }
 
-    pub fn add_binds(self: *@This(), builder: *render_utils.DescriptorSet.Builder) !void {
+    pub fn add_binds(self: *@This(), builder: *render_utils.DescriptorSet.Builder, builder_back: *render_utils.DescriptorSet.Builder) !void {
         const add_to_set = struct {
             fn func(set_builder: @TypeOf(builder), buf: *Buffer, bind: UniformBinds) !void {
                 try set_builder.add(buf, bind.bind());
@@ -330,7 +359,17 @@ pub const ResourceManager = struct {
 
         try add_to_set(builder, &self.uniform_buf, .camera);
         try add_to_set(builder, &self.particles_draw_call_buf, .particles_draw_call);
+        try add_to_set(builder, &self.scratch, .scratch);
+        try add_to_set(builder, &self.particles_back, .particles_back);
         try add_to_set(builder, &self.particles, .particles);
+        try add_to_set(builder, &self.particle_bins, .particle_bins);
+
+        try add_to_set(builder_back, &self.uniform_buf, .camera);
+        try add_to_set(builder_back, &self.particles_draw_call_buf, .particles_draw_call);
+        try add_to_set(builder_back, &self.scratch, .scratch);
+        try add_to_set(builder_back, &self.particles, .particles_back);
+        try add_to_set(builder_back, &self.particles_back, .particles);
+        try add_to_set(builder_back, &self.particle_bins, .particle_bins);
     }
 
     pub fn update_uniforms(self: *@This(), device: *Device) !void {
@@ -345,7 +384,10 @@ pub const ResourceManager = struct {
     pub const UniformBinds = enum(u32) {
         camera,
         particles_draw_call,
+        scratch,
+        particles_back,
         particles,
+        particle_bins,
 
         pub fn bind(self: @This()) u32 {
             return @intFromEnum(self);
@@ -362,6 +404,10 @@ pub const ResourceManager = struct {
     };
     pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
+    pub const PushConstants = extern struct {
+        reduce_step: i32,
+    };
+
     pub const Uniforms = extern struct {
         camera: utils_mod.ShaderUtils.Camera2D,
         frame: utils_mod.ShaderUtils.Frame,
@@ -375,6 +421,10 @@ pub const ResourceManager = struct {
             friction: f32,
             particle_count: u32 = 0,
             spawn_count: u32,
+            bin_size: i32,
+            bin_buf_size: i32,
+            bin_buf_size_x: i32,
+            bin_buf_size_y: i32,
 
             _pad0: u32 = 0,
             _pad1: u32 = 0,
@@ -393,6 +443,13 @@ pub const ResourceManager = struct {
             state.params.spawn_count = spawn_count;
             state.params.particle_count += spawn_count;
             state.params.friction = @exp(-state.friction * state.ticker.scaled.delta);
+
+            state.params.bin_size = state.bin_size;
+            state.params.bin_buf_size_x = math.divide_roof(cast(i32, state.monitor_rez.width), state.params.bin_size);
+            state.params.bin_buf_size_y = math.divide_roof(cast(i32, state.monitor_rez.height), state.params.bin_size);
+            state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y;
+            // TODO: don't fuse every frame man
+            _ = state.cmdbuf_fuse.fuse();
 
             if (spawn_count > 0) _ = state.cmdbuf_fuse.fuse();
 
@@ -425,6 +482,7 @@ pub const RendererState = struct {
     swapchain: Swapchain,
     cmdbuffer: CmdBuffer,
     descriptor_set: DescriptorSet,
+    descriptor_set_back: DescriptorSet,
 
     stages: ShaderStageManager,
     pipelines: Pipelines,
@@ -436,12 +494,20 @@ pub const RendererState = struct {
         bg: GraphicsPipeline,
         render: GraphicsPipeline,
         spawn_particles: ComputePipeline,
+        bin_reset: ComputePipeline,
+        particle_count: ComputePipeline,
+        bin_prefix_sum: ComputePipeline,
+        particle_binning: ComputePipeline,
         tick_particles: ComputePipeline,
 
         fn deinit(self: *@This(), device: *Device) void {
             self.bg.deinit(device);
             self.render.deinit(device);
             self.spawn_particles.deinit(device);
+            self.bin_reset.deinit(device);
+            self.particle_count.deinit(device);
+            self.bin_prefix_sum.deinit(device);
+            self.particle_binning.deinit(device);
             self.tick_particles.deinit(device);
         }
     };
@@ -459,6 +525,7 @@ pub const RendererState = struct {
         try gen.add_struct("DrawCall", ResourceManager.DrawCall);
         try gen.add_struct("Particle", ResourceManager.Particle);
         try gen.add_struct("Params", ResourceManager.Uniforms.Params);
+        try gen.add_struct("PushConstants", ResourceManager.PushConstants);
         try gen.add_struct("Uniforms", ResourceManager.Uniforms);
         try gen.add_enum("_bind", ResourceManager.UniformBinds);
         try gen.dump_shader("src/uniforms.glsl");
@@ -501,6 +568,34 @@ pub const RendererState = struct {
             .define = try alloc.dupe([]const u8, &[_][]const u8{ "SPAWN_PARTICLES_PASS", "COMPUTE_PASS" }),
         });
         try shader_stages.append(.{
+            .name = "bin_reset",
+            .stage = .compute,
+            .path = "src/shader.glsl",
+            .include = includes,
+            .define = try alloc.dupe([]const u8, &[_][]const u8{ "BIN_RESET_PASS", "COMPUTE_PASS" }),
+        });
+        try shader_stages.append(.{
+            .name = "particle_count",
+            .stage = .compute,
+            .path = "src/shader.glsl",
+            .include = includes,
+            .define = try alloc.dupe([]const u8, &[_][]const u8{ "PARTICLE_COUNT_PASS", "COMPUTE_PASS" }),
+        });
+        try shader_stages.append(.{
+            .name = "bin_prefix_sum",
+            .stage = .compute,
+            .path = "src/shader.glsl",
+            .include = includes,
+            .define = try alloc.dupe([]const u8, &[_][]const u8{ "BIN_PREFIX_SUM_PASS", "COMPUTE_PASS" }),
+        });
+        try shader_stages.append(.{
+            .name = "particle_binning",
+            .stage = .compute,
+            .path = "src/shader.glsl",
+            .include = includes,
+            .define = try alloc.dupe([]const u8, &[_][]const u8{ "PARTICLE_BINNING_PASS", "COMPUTE_PASS" }),
+        });
+        try shader_stages.append(.{
             .name = "tick_particles",
             .stage = .compute,
             .path = "src/shader.glsl",
@@ -520,6 +615,7 @@ pub const RendererState = struct {
             .stages = stages,
             .pipelines = undefined,
             .descriptor_set = undefined,
+            .descriptor_set_back = undefined,
             .swapchain = swapchain,
             .pool = app.command_pool,
             .cmdbuffer = undefined,
@@ -527,6 +623,7 @@ pub const RendererState = struct {
 
         try self.create_pipelines(engine, app, false);
         errdefer self.descriptor_set.deinit(device);
+        errdefer self.descriptor_set_back.deinit(device);
         errdefer self.pipelines.deinit(device);
 
         self.cmdbuffer = try self.create_cmdbuf(engine, app, app_state);
@@ -560,9 +657,15 @@ pub const RendererState = struct {
 
         var desc_set_builder = app.descriptor_pool.set_builder();
         defer desc_set_builder.deinit();
-        try app.resources.add_binds(&desc_set_builder);
+        var desc_set_builder_back = app.descriptor_pool.set_builder();
+        defer desc_set_builder_back.deinit();
+
+        try app.resources.add_binds(&desc_set_builder, &desc_set_builder_back);
+
         var desc_set = try desc_set_builder.build(device);
         errdefer desc_set.deinit(device);
+        var desc_set_back = try desc_set_builder_back.build(device);
+        errdefer desc_set_back.deinit(device);
 
         if (initialized) {
             self.pipelines.bg.deinit(device);
@@ -575,7 +678,6 @@ pub const RendererState = struct {
                 .depth_format = app.depth_image.format,
             },
             .desc_set_layouts = &.{desc_set.layout},
-            .push_constant_ranges = &[_]vk.PushConstantRange{},
             .cull_mode = .{},
             .render_mode = .solid_triangles,
         });
@@ -593,7 +695,6 @@ pub const RendererState = struct {
             .desc_set_layouts = &.{
                 desc_set.layout,
             },
-            .push_constant_ranges = &[_]vk.PushConstantRange{},
             .cull_mode = .{},
             .render_mode = .solid_triangles,
             .alpha_blend = .{
@@ -617,6 +718,46 @@ pub const RendererState = struct {
         });
 
         if (initialized) {
+            self.pipelines.bin_reset.deinit(device);
+        }
+        self.pipelines.bin_reset = try ComputePipeline.new(device, .{
+            .shader = self.stages.shaders.map.get("bin_reset").?.code,
+            .desc_set_layouts = &.{desc_set.layout},
+        });
+
+        if (initialized) {
+            self.pipelines.particle_count.deinit(device);
+        }
+        self.pipelines.particle_count = try ComputePipeline.new(device, .{
+            .shader = self.stages.shaders.map.get("particle_count").?.code,
+            .desc_set_layouts = &.{desc_set.layout},
+        });
+
+        if (initialized) {
+            self.pipelines.bin_prefix_sum.deinit(device);
+        }
+        self.pipelines.bin_prefix_sum = try ComputePipeline.new(device, .{
+            .shader = self.stages.shaders.map.get("bin_prefix_sum").?.code,
+            .desc_set_layouts = &.{desc_set.layout},
+            .push_constant_ranges = &[_]vk.PushConstantRange{.{
+                .stage_flags = .{
+                    .vertex_bit = true,
+                    .fragment_bit = true,
+                },
+                .offset = 0,
+                .size = @sizeOf(ResourceManager.PushConstants),
+            }},
+        });
+
+        if (initialized) {
+            self.pipelines.particle_binning.deinit(device);
+        }
+        self.pipelines.particle_binning = try ComputePipeline.new(device, .{
+            .shader = self.stages.shaders.map.get("particle_binning").?.code,
+            .desc_set_layouts = &.{desc_set.layout},
+        });
+
+        if (initialized) {
             self.pipelines.tick_particles.deinit(device);
         }
         self.pipelines.tick_particles = try ComputePipeline.new(device, .{
@@ -626,13 +767,19 @@ pub const RendererState = struct {
 
         if (initialized) {
             self.descriptor_set.deinit(device);
+            self.descriptor_set_back.deinit(device);
         }
         self.descriptor_set = desc_set;
+        self.descriptor_set_back = desc_set_back;
     }
 
     pub fn create_cmdbuf(self: *@This(), engine: *Engine, app: *App, app_state: *AppState) !CmdBuffer {
         const ctx = &engine.graphics;
         const device = &ctx.device;
+
+        const alloc = app_state.arena.allocator();
+
+        std.mem.swap(&self.descriptor_set, &self.descriptor_set_back);
 
         var cmdbuf = try CmdBuffer.init(device, .{
             .pool = app.command_pool,
@@ -653,12 +800,70 @@ pub const RendererState = struct {
             .dst = .{ .compute_shader_bit = true },
         });
 
+        // bin reset
+        cmdbuf.bindCompute(device, .{
+            .pipeline = self.pipelines.bin_reset,
+            .desc_set = self.descriptor_set.set,
+        });
+        cmdbuf.dispatch(device, .{ .x = math.divide_roof(cast(u32, app_state.params.bin_buf_size), 64) });
+        cmdbuf.memBarrier(device, .{
+            .src = .{ .compute_shader_bit = true },
+            .dst = .{ .compute_shader_bit = true },
+        });
+
+        // count particles
+        cmdbuf.bindCompute(device, .{
+            .pipeline = self.pipelines.particle_count,
+            .desc_set = self.descriptor_set.set,
+        });
+        cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
+        cmdbuf.memBarrier(device, .{
+            .src = .{ .compute_shader_bit = true },
+            .dst = .{ .compute_shader_bit = true },
+        });
+
+        // bin count prefix sum
+        cmdbuf.bindCompute(device, .{
+            .pipeline = self.pipelines.bin_prefix_sum,
+            .desc_set = self.descriptor_set.set,
+        });
+        var bin_buf_size = app_state.params.bin_buf_size;
+        var reduce_step: u32 = 0;
+        while (bin_buf_size >= 1) {
+            // TODO: oof. don't use arena allocator. somehow retain this memory somewhere.
+            const constants = try alloc.create(ResourceManager.PushConstants);
+            constants.* = .{ .reduce_step = reduce_step };
+            cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants));
+            cmdbuf.dispatch(device, .{ .x = cast(u32, math.divide_roof(bin_buf_size, 64)) });
+            cmdbuf.memBarrier(device, .{
+                .src = .{ .compute_shader_bit = true },
+                .dst = .{ .compute_shader_bit = true },
+            });
+
+            if (bin_buf_size > 1) {
+                break;
+            }
+            bin_buf_size = math.divide_roof(bin_buf_size, 64);
+            reduce_step += 1;
+        }
+
+        // bin particles
+        cmdbuf.bindCompute(device, .{
+            .pipeline = self.pipelines.particle_binning,
+            .desc_set = self.descriptor_set.set,
+        });
+        cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
+        cmdbuf.memBarrier(device, .{
+            .src = .{ .compute_shader_bit = true },
+            .dst = .{ .compute_shader_bit = true },
+        });
+
         // tick particles
         cmdbuf.bindCompute(device, .{
             .pipeline = self.pipelines.tick_particles,
             .desc_set = self.descriptor_set.set,
         });
-        cmdbuf.dispatch(device, .{ .x = app_state.params.particle_count / 64 + @as(u32, @intFromBool(app_state.params.particle_count % 64 > 0)) });
+        cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
         cmdbuf.memBarrier(device, .{
             .src = .{ .compute_shader_bit = true },
             .dst = .{
@@ -763,8 +968,19 @@ pub const AppState = struct {
 
     spawn_count: u32 = 0,
     friction: f32 = 0,
-    params: ResourceManager.Uniforms.Params = .{ .spawn_count = 0, .friction = 0 },
+    bin_size: i32 = 8 * 16,
+    params: ResourceManager.Uniforms.Params = .{
+        .spawn_count = 0,
+        .friction = 0,
+
+        .bin_size = 0,
+        .bin_buf_size = 0,
+        .bin_buf_size_x = 0,
+        .bin_buf_size_y = 0,
+    },
     camera: ShaderUtils.Camera2D = .{ .eye = .{} },
+
+    arena: std.heap.ArenaAllocator,
 
     // fn interpolated(self: *const @This(), lt: *const C.LastTransform, t: *const C.GlobalTransform) C.Transform {
     //     return lt.transform.lerp(&t.transform, self.ticker.simulation.interpolation_factor);
@@ -780,11 +996,12 @@ pub const AppState = struct {
             .monitor_rez = .{ .width = sze.width, .height = sze.height },
             .mouse = .{ .x = mouse.x, .y = mouse.y, .left = mouse.left },
             .rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp())),
+            .arena = std.heap.ArenaAllocator.init(allocator.*),
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        _ = self;
+        self.arena.deinit();
     }
 
     pub fn pre_reload(self: *@This()) !void {
@@ -800,6 +1017,8 @@ pub const AppState = struct {
     pub fn tick(self: *@This(), engine: *Engine, app: *App) !void {
         app.telemetry.begin_sample(@src(), "app_state.tick");
         defer app.telemetry.end_sample();
+
+        defer _ = self.arena.reset(.retain_capacity);
 
         self.ticker.tick_real();
         engine.window.tick();

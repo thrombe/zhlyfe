@@ -6,9 +6,6 @@
 struct GpuState {
     int particle_count;
 
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
     vec4 _pad_aligned;
 };
 
@@ -38,10 +35,20 @@ vec2 quad_uvs[6] = vec2[6](
 layout(set = 0, binding = _bind_camera) uniform Ubo {
     Uniforms ubo;
 };
-layout(set = 0, binding = _bind_particles) bufffer ParticleBuffer {
-    // uhohh. steal some memory from particle buffer
+layout(push_constant) uniform PushConstantsUniform {
+    PushConstants push;
+};
+layout(set = 0, binding = _bind_scratch) bufffer ScratchBuffer {
     GpuState state;
+};
+layout(set = 0, binding = _bind_particles_back) bufffer ParticleBackBuffer {
+    Particle particles_back[];
+};
+layout(set = 0, binding = _bind_particles) bufffer ParticleBuffer {
     Particle particles[];
+};
+layout(set = 0, binding = _bind_particle_bins) bufffer ParticleBibBuffer {
+    int particle_bins[];
 };
 layout(set = 0, binding = _bind_particles_draw_call) bufffer ParticlesDrawCallBuffer {
     DrawCall draw_call;
@@ -63,9 +70,11 @@ void set_seed(int id) {
 
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         int index = atomicAdd(state.particle_count, 1);
-        particles[index].pos = vec2(random(), random()) * mres;
-        particles[index].vel = 50.0 * (vec2(random(), random()) - 0.5) * 2.0;
-        particles[index].color = rgba_encode_u32(vec4(random(), random(), random(), 1.0));
+        Particle p;
+        p.pos = vec2(random(), random()) * mres;
+        p.vel = 50.0 * (vec2(random(), random()) - 0.5) * 2.0;
+        p.color = rgba_encode_u32(vec4(random(), random(), random(), 1.0));
+        particles_back[index] = p;
 
         if (id > 0) {
             return;
@@ -81,6 +90,77 @@ void set_seed(int id) {
         draw_call.first_instance = 0;
     }
 #endif // SPAWN_PARTICLES_PASS
+
+#ifdef BIN_RESET_PASS
+    layout (local_size_x = 8, local_size_y = 8) in;
+    void main() {
+        int id = global_id;
+
+        if (ubo.params.bin_buf_size >= id) {
+            return;
+        }
+
+        particle_bins[id] = 0;
+    }
+#endif // BIN_RESET_PASS
+
+#ifdef PARTICLE_COUNT_PASS
+    layout (local_size_x = 8, local_size_y = 8) in;
+    void main() {
+        int id = global_id;
+
+        if (id >= state.particle_count) {
+            return;
+        }
+
+        Particle p = particles_back[id];
+
+        ivec2 pos = ivec2(p.pos / ubo.params.bin_size);
+        pos = min(pos, ivec2(ubo.params.bin_buf_size_x, ubo.params.bin_buf_size_y));
+        int index = pos.y * ubo.params.bin_buf_size_x + pos.x;
+
+        int _count = atomicAdd(particle_bins[index], 1);
+    }
+#endif // PARTICLE_COUNT_PASS
+
+#ifdef BIN_PREFIX_SUM_PASS
+    layout (local_size_x = 8, local_size_y = 8) in;
+    void main() {
+        int id = global_id;
+
+        for (int i=1; i<=64; i<<=1) {
+            int step = i << push.reduce_step;
+            if (id >= step) {
+                int a = particle_bins[id];
+                int b = particle_bins[id - step];
+                particle_bins[id] = a + b;
+            }
+            barrier();
+        }
+    }
+#endif // BIN_PREFIX_SUM_PASS
+
+#ifdef PARTICLE_BINNING_PASS
+    layout (local_size_x = 8, local_size_y = 8) in;
+    void main() {
+        int id = global_id;
+
+        if (id >= state.particle_count) {
+            return;
+        }
+
+        Particle p = particles_back[id];
+
+
+        ivec2 pos = ivec2(p.pos / ubo.params.bin_size);
+        pos = min(pos, ivec2(ubo.params.bin_buf_size_x, ubo.params.bin_buf_size_y));
+        int index = pos.y * ubo.params.bin_buf_size_x + pos.x;
+
+        int bin_index = atomicAdd(particle_bins[index], -1) - 1;
+
+        particles[bin_index] = p;
+    }
+#endif // PARTICLE_BINNING_PASS
 
 #ifdef TICK_PARTICLES_PASS
     layout (local_size_x = 8, local_size_y = 8) in;

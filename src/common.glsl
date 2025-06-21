@@ -7,6 +7,10 @@
         gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x +\
         gl_GlobalInvocationID.z * gl_NumWorkGroups.x * gl_NumWorkGroups.y * gl_WorkGroupSize.x * gl_WorkGroupSize.y)
 
+#define u32 uint
+#define i32 int
+#define f32 float
+
 uint rand_xorshift(uint state) {
     state ^= (state << 13);
     state ^= (state >> 17);

@@ -24,8 +24,16 @@
      float friction;
      uint particle_count;
      uint spawn_count;
+     int bin_size;
+     int bin_buf_size;
+     int bin_buf_size_x;
+     int bin_buf_size_y;
      uint _pad0;
      uint _pad1;
+ };
+
+ struct PushConstants {
+     uint reduce_step;
  };
 
  struct Camera2DMeta {
@@ -67,5 +75,8 @@
 
  const int _bind_camera = 0;
  const int _bind_particles_draw_call = 1;
- const int _bind_particles = 2;
+ const int _bind_scratch = 2;
+ const int _bind_particles_back = 3;
+ const int _bind_particles = 4;
+ const int _bind_particle_bins = 5;
 

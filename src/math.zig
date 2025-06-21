@@ -1,5 +1,16 @@
 const std = @import("std");
 
+pub fn divide_roof(x: anytype, r: @TypeOf(x)) @TypeOf(x) {
+    switch (@typeInfo(@TypeOf(x))) {
+        .int => {
+            return @divFloor(x, r) + @as(@TypeOf(x), @intFromBool(@mod(x, r) > 0));
+        },
+        else => {
+            return x / r + @as(@TypeOf(x), @intFromBool(x % r > 0));
+        },
+    }
+}
+
 pub const Rng = struct {
     rng: std.Random,
     constraints: Constraints = .{},
