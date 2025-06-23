@@ -926,7 +926,7 @@ const ShaderStageManager = struct {
     compiler: utils_mod.ShaderCompiler.Compiler,
 
     pub fn init(stages: []const utils_mod.ShaderCompiler.ShaderInfo) !@This() {
-        var comp = try utils_mod.ShaderCompiler.Compiler.init(.{ .opt = .none, .env = .vulkan1_3 }, stages);
+        var comp = try utils_mod.ShaderCompiler.Compiler.init(.{ .opt = .fast, .env = .vulkan1_3 }, stages);
         errdefer comp.deinit();
 
         return .{
