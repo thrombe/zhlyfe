@@ -295,6 +295,11 @@ pub const Vec4 = extern struct {
         return Vec3{ .x = q_result.x, .y = q_result.y, .z = q_result.z };
     }
 
+    pub fn as_buf(self: *@This()) []f32 {
+        const bytes = std.mem.asBytes(self);
+        return std.mem.bytesAsSlice(f32, bytes);
+    }
+
     pub fn to_buf(self: *const @This()) [4]f32 {
         return .{ self.x, self.y, self.z, self.w };
     }

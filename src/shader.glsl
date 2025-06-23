@@ -270,7 +270,7 @@ ivec2 get_bin_pos(vec2 pos) {
         vec2 vpos = quad_verts[vert_index].xy;
 
         float zoom = ubo.params.zoom;
-        float particle_size = t.visual_size;
+        float particle_size = t.visual_radius;
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
@@ -296,7 +296,7 @@ ivec2 get_bin_pos(vec2 pos) {
         float distanceFromCenter = length(vuv.xy - 0.5);
         float mask = 1.0 - smoothstep(0.5 - 0.1/zoom, 0.5, distanceFromCenter);
         // mask = pow(1.0 - distanceFromCenter, 4.5) * mask;
-        fcolor = vec4(vec3(0.2, vcolor.y, vcolor.z), vcolor.a * mask);
+        fcolor = vec4(vcolor.xyz, vcolor.a * mask);
     }
 #endif // RENDER_FRAG_PASS
 

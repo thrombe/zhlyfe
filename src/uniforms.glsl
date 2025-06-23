@@ -8,13 +8,25 @@
      uint first_instance;
  };
 
- struct Particle {
-     vec2 pos;
-     vec2 vel;
-     uint color;
+ struct ParticleType {
+     vec4 color;
+     float visual_radius;
      uint _pad0;
      uint _pad1;
      uint _pad2;
+ };
+
+ struct ParticleForce {
+     float attraction_strength;
+     float attraction_radius;
+     float collision_strength;
+     float collision_radius;
+ };
+
+ struct Particle {
+     vec2 pos;
+     vec2 vel;
+     uint type_index;
  };
 
  struct Params {
@@ -22,6 +34,7 @@
      uint grid_size;
      float zoom;
      float friction;
+     uint particle_type_count;
      uint particle_count;
      uint spawn_count;
      int bin_size;
@@ -79,8 +92,10 @@
  const int _bind_camera = 0;
  const int _bind_particles_draw_call = 1;
  const int _bind_scratch = 2;
- const int _bind_particles_back = 3;
- const int _bind_particles = 4;
- const int _bind_particle_bins_back = 5;
- const int _bind_particle_bins = 6;
+ const int _bind_particle_types = 3;
+ const int _bind_particle_force_matrix = 4;
+ const int _bind_particles_back = 5;
+ const int _bind_particles = 6;
+ const int _bind_particle_bins_back = 7;
+ const int _bind_particle_bins = 8;
 

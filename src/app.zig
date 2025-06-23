@@ -1250,8 +1250,8 @@ pub const GuiState = struct {
     }
 
     fn editState(self: *@This(), app: *App, state: *AppState) void {
-        _ = self;
-        _ = app;
+        // _ = self;
+        // _ = app;
 
         var reset = false;
 
@@ -1273,9 +1273,49 @@ pub const GuiState = struct {
         c.ImGui_Text("scaled time: %.3f", state.ticker.scaled.time_f);
         c.ImGui_Text("physics acctime/step: %.3f", state.ticker.simulation.acctime_f / state.ticker.simulation.step_f);
 
+        {
+            c.ImGui_PushID("particle_types");
+            defer c.ImGui_PopID();
+
+            c.ImGui_Text("Particles");
+            for (app.resources.particle_types[0..state.params.particle_type_count], 0..) |*pt, i| {
+                c.ImGui_PushIDInt(@intCast(i));
+                defer c.ImGui_PopID();
+
+                c.ImGui_Text("type: %d", i);
+                self.editParticleType(pt);
+            }
+        }
+        c.ImGui_Text(" ");
+        {
+            c.ImGui_PushID("particle_force_matrix");
+            defer c.ImGui_PopID();
+            c.ImGui_Text("Particle forces");
+            for (app.resources.particle_force_matrix[0 .. state.params.particle_type_count * state.params.particle_type_count], 0..) |*pf, i| {
+                c.ImGui_PushIDInt(@intCast(i));
+                defer c.ImGui_PopID();
+
+                c.ImGui_Text(" ");
+                c.ImGui_Text("type: %d vs %d", i / state.params.particle_type_count, i % state.params.particle_type_count);
+                self.editParticleForce(pf);
+            }
+        }
+
         if (reset) {
             _ = state.cmdbuf_fuse.fuse();
             state.reset_time();
         }
+    }
+
+    fn editParticleType(_: *@This(), e: *ResourceManager.ParticleType) void {
+        _ = c.ImGui_ColorEdit4("color", e.color.as_buf().ptr, c.ImGuiColorEditFlags_AlphaBar | c.ImGuiColorEditFlags_Float);
+        _ = c.ImGui_SliderFloat("visual_radius", &e.visual_radius, 0, 100);
+    }
+
+    fn editParticleForce(_: *@This(), e: *ResourceManager.ParticleForce) void {
+        _ = c.ImGui_SliderFloat("attraction_strength", &e.attraction_strength, -200, 200);
+        _ = c.ImGui_SliderFloat("attraction_radius", &e.attraction_radius, 0, 128);
+        _ = c.ImGui_SliderFloat("collision_strength", &e.collision_strength, -200, 200);
+        _ = c.ImGui_SliderFloat("collision_radius", &e.collision_radius, 0, 128);
     }
 };
