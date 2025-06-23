@@ -77,7 +77,6 @@ void set_seed(int id) {
         p.pos = vec2(random(), random()) * mres;
         p.vel = 50.0 * (vec2(random(), random()) - 0.5) * 2.0;
         p.color = rgba_encode_u32(vec4(random(), random(), random(), 1.0));
-        particles_back[index] = p;
         particles[index] = p;
 
         if (id > 0) {
@@ -111,14 +110,12 @@ void set_seed(int id) {
             // atomicAdd(particle_bins[index], -1);
         }
 
-        // return;
         if (id >= ubo.params.bin_buf_size) {
             return;
         }
 
         particle_bins[id] = 0;
         particle_bins_back[id] = 0;
-        barrier();
 
         if (id == 0) {
             state.prefix_sum_pass = 0;
@@ -132,68 +129,57 @@ void set_seed(int id) {
     void main() {
         int id = global_id;
 
-        // return;
         if (id >= state.particle_count) {
             return;
         }
 
-        Particle p = particles_back[id];
+        Particle p = particles[id];
 
         ivec2 pos = ivec2(p.pos / ubo.params.bin_size);
         pos = clamp(pos, ivec2(0, 0), ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
         int index = clamp(pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
-        // index += 2;
-        // index = 0;
-        // index += 2;
-        // index /= 2;
 
-        // int _count = atomicAdd(particle_bins[index], 1);
         int _count = atomicAdd(particle_bins_back[index], 1);
     }
 #endif // PARTICLE_COUNT_PASS
 
 #ifdef BIN_PREFIX_SUM_PASS
-    // layout(push_constant) uniform PushConstantsUniform {
-    //     PushConstants push;
-    // };
+    layout(push_constant) uniform PushConstantsUniform {
+        PushConstants push;
+    };
 
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
 
+        // particle_bins[id] = particle_bins_back[id];
         // return;
         if (id >= ubo.params.bin_buf_size) {
             return;
         }
 
-        int step = 1 << state.prefix_sum_pass;
+        int step = 1 << push.reduce_step;
         if (id >= step) {
-            atomicAdd(particle_bins[id], atomicAdd(particle_bins_back[id - step], 0));
-            barrier();
-            atomicExchange(particle_bins_back[id], atomicAdd(particle_bins[id], 0));
+            int a = particle_bins_back[id];
+            int b = particle_bins_back[id - step];
+            particle_bins[id] = a + b;
         } else {
-            atomicExchange(particle_bins_back[id], atomicAdd(particle_bins[id], 0));
-            // particle_bins[id] = particle_bins_back[id];
+            int a = particle_bins_back[id];
+            particle_bins[id] = a;
         }
 
-        barrier();
+        // particle_bins[step] = 1;
+        // particle_bins_back[step] = 1;
 
-
-        // return;
         // for (int i=1; i<=1; i<<=1) {
         //     int step = i << state.prefix_sum_pass;
         //     // particle_bins[step] = 100000;
         //     if (id >= step) {
-        //         int a = particle_bins[id];
-        //         int b = particle_bins[id - step];
+        //         int a = particle_bins_back[id];
+        //         int b = particle_bins_back[id - step];
         //         particle_bins[id] = a + b;
         //     }
-        //     barrier();
         // }
-
-        if (id == 0) {
-            state.prefix_sum_pass += 1;
-        }
     }
 #endif // BIN_PREFIX_SUM_PASS
 
@@ -202,34 +188,28 @@ void set_seed(int id) {
     void main() {
         int id = global_id;
 
+        // Particle pp = particles[id];
+        // particles_back[id] = pp;
         // return;
+
         if (id >= state.particle_count) {
             return;
         }
 
-        Particle p = particles_back[id];
-        // particles[state.particle_count - id] = p;
-        // return;
+        Particle p = particles[id];
 
         ivec2 pos = ivec2(p.pos / ubo.params.bin_size);
         pos = clamp(pos, ivec2(0, 0), ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
         int index = clamp(pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
-        // index += 2;
-        // index = 0;
-        // index += 2;
-        // index /= 2;
 
-        barrier();
         int bin_index = atomicAdd(particle_bins[index], -1);
 
         if (bin_index > 0) {
             state.bad_flag = 1;
         }
 
-        barrier();
-        p.color = rgba_encode_u32(vec4(index == ubo.params.bin_buf_size - 1, 0.0, 0.0, 1.0));
-        particles[bin_index - 1] = p;
-        barrier();
+        // p.color = rgba_encode_u32(vec4(index == ubo.params.bin_buf_size - 1, 0.0, 0.0, 1.0));
+        particles_back[bin_index - 1] = p;
     }
 #endif // PARTICLE_BINNING_PASS
 
@@ -239,12 +219,15 @@ void set_seed(int id) {
         int id = global_id;
         set_seed(id);
 
+        // Particle pp = particles_back[id];
+        // particles[id] = pp;
+        // return;
+
         if (id >= state.particle_count) {
             return;
         }
 
-        Particle p = particles[id];
-        barrier();
+        Particle p = particles_back[id];
 
         p.vel *= ubo.params.friction;
         p.pos += p.vel * ubo.frame.deltatime;
@@ -262,11 +245,7 @@ void set_seed(int id) {
             p.pos.y = 0;
         }
 
-        barrier();
-        // particles[id] = p;
-        barrier();
-        particles_back[id] = p;
-        barrier();
+        particles[id] = p;
     }
 #endif // TICK_PARTICLES_PASS
 
@@ -343,26 +322,30 @@ void set_seed(int id) {
         vec3 color = mix(vec3(0.2, 0.15, 0.35), vec3(0.25, 0.20, 0.40), checker);
 
         vec2 fpos = gl_FragCoord.xy;
+        fpos -= wres / 2.0;
+        fpos /= zoom;
+        fpos -= eye;
+        fpos /= grid_size;
         ivec2 pos = ivec2(int(fpos.x), int(fpos.y));
-        pos /= 4;
-        pos.y -= 100;
-        pos.x -= 10;
+        pos.y += 3;
         int index = pos.y * ubo.frame.width + pos.x;
         if (ubo.params.bin_buf_size > index && index >= 0) {
             int count = particle_bins[index];
             // color = vec3(float(count) > 3000);
             // color = vec3(sqrt(float(count))/50.0);
             color = vec3(float(count)/4500.0);
+            // color = vec3(float(count)/1600.0);
             // color = vec3(float(count)/700.0);
             // color = vec3(float(count)/300.0);
             // color = vec3(float(count)/50.0);
 
-            color = vec3(float(particle_bins_back[index] > 0));
+            color = vec3(float(particle_bins[index] > 4500 * mod(ubo.frame.time, 1)));
+            // color = vec3(float(particle_bins[index] > 20 * mod(ubo.frame.time, 1)));
         }
 
-        if (state.bad_flag > 0) {
-            color = vec3(1, 0, 0);
-        }
+        // if (state.bad_flag > 0) {
+        //     color = vec3(1, 0, 0);
+        // }
         
         fcolor = vec4(color, 1.0);
     }

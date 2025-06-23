@@ -1465,12 +1465,12 @@ pub const CmdBuffer = struct {
         }
     }
 
-    pub fn push_constants(self: *@This(), device: *Device, pipeline_layout: vk.PipelineLayout, constants: []const u8) void {
+    pub fn push_constants(self: *@This(), device: *Device, pipeline_layout: vk.PipelineLayout, constants: []const u8, flags: vk.ShaderStageFlags) void {
         for (self.bufs) |cmdbuf| {
             device.cmdPushConstants(
                 cmdbuf,
                 pipeline_layout,
-                .{ .vertex_bit = true, .fragment_bit = true },
+                flags,
                 0,
                 @intCast(constants.len),
                 @ptrCast(constants.ptr),

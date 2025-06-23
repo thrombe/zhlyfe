@@ -379,8 +379,8 @@ pub const ResourceManager = struct {
         try add_to_set(builder_back, &self.scratch, .scratch);
         try add_to_set(builder_back, &self.particles_back, .particles_back);
         try add_to_set(builder_back, &self.particles, .particles);
-        try add_to_set(builder_back, &self.particle_bins_back, .particle_bins_back);
-        try add_to_set(builder_back, &self.particle_bins, .particle_bins);
+        try add_to_set(builder_back, &self.particle_bins, .particle_bins_back);
+        try add_to_set(builder_back, &self.particle_bins_back, .particle_bins);
     }
 
     pub fn update_uniforms(self: *@This(), device: *Device) !void {
@@ -756,13 +756,11 @@ pub const RendererState = struct {
         self.pipelines.bin_prefix_sum = try ComputePipeline.new(device, .{
             .shader = self.stages.shaders.map.get("bin_prefix_sum").?.code,
             .desc_set_layouts = &.{desc_set.layout},
-            // .push_constant_ranges = &[_]vk.PushConstantRange{.{
-            //     .stage_flags = .{
-            //         .compute_bit = true,
-            //     },
-            //     .offset = 0,
-            //     .size = @sizeOf(ResourceManager.PushConstants),
-            // }},
+            .push_constant_ranges = &[_]vk.PushConstantRange{.{
+                .stage_flags = .{ .compute_bit = true },
+                .offset = 0,
+                .size = @sizeOf(ResourceManager.PushConstants),
+            }},
         });
 
         if (initialized) {
@@ -794,7 +792,7 @@ pub const RendererState = struct {
         const device = &ctx.device;
 
         const alloc = app_state.arena.allocator();
-        _ = alloc;
+        // _ = alloc;
 
         // std.mem.swap(DescriptorSet, &self.descriptor_set, &self.descriptor_set_back);
 
@@ -831,16 +829,18 @@ pub const RendererState = struct {
         cmdbuf.memBarrier(device, .{});
 
         // bin count prefix sum
-        cmdbuf.bindCompute(device, .{
-            .pipeline = self.pipelines.bin_prefix_sum,
-            .desc_set = self.descriptor_set.set,
-        });
         var reduce_step: u5 = 0;
         while (true) : (reduce_step += 1) {
+            cmdbuf.bindCompute(device, .{
+                .pipeline = self.pipelines.bin_prefix_sum,
+                .desc_set = self.descriptor_set.set,
+            });
+
             // TODO: oof. don't use arena allocator. somehow retain this memory somewhere.
-            // const constants = try alloc.create(ResourceManager.PushConstants);
-            // constants.* = .{ .reduce_step = reduce_step };
-            // cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants));
+            const constants = try alloc.create(ResourceManager.PushConstants);
+            constants.* = .{ .reduce_step = reduce_step };
+            cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
+
             cmdbuf.dispatch(device, .{ .x = cast(u32, app_state.params.bin_buf_size) });
             cmdbuf.memBarrier(device, .{});
 
@@ -848,6 +848,8 @@ pub const RendererState = struct {
             if (app_state.params.bin_buf_size - (@as(i32, 1) << reduce_step) < 0) {
                 break;
             }
+
+            std.mem.swap(DescriptorSet, &self.descriptor_set, &self.descriptor_set_back);
         }
 
         // bin particles
