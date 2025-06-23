@@ -271,6 +271,8 @@ pub const ResourceManager = struct {
     uniform_buf: Buffer,
 
     scratch: Buffer,
+    particle_types: Buffer,
+    particle_force_matrix: Buffer,
     particles_back: Buffer,
     particles: Buffer,
     particle_bins_back: Buffer,
@@ -280,6 +282,7 @@ pub const ResourceManager = struct {
 
     pub fn init(engine: *Engine, pool: vk.CommandPool, v: struct {
         num_particles: u32 = 5000,
+        particle_type_count: u32 = 10,
     }) !@This() {
         const ctx = &engine.graphics;
         const device = &ctx.device;
@@ -299,6 +302,19 @@ pub const ResourceManager = struct {
             .desc_type = .uniform_buffer,
         }, std.mem.zeroes(Uniforms), pool);
         errdefer uniform_buf.deinit(device);
+
+        // TODO: initialize particle types and particle force matrix
+        var particle_types = try Buffer.new(ctx, .{
+            .size = @sizeOf(ParticleType) * v.particle_type_count,
+            .usage = .{ .storage_buffer_bit = true },
+        });
+        errdefer particle_types.deinit(device);
+
+        var particle_force_matrix = try Buffer.new(ctx, .{
+            .size = @sizeOf(ParticleForce) * v.particle_type_count * v.particle_type_count,
+            .usage = .{ .storage_buffer_bit = true },
+        });
+        errdefer particle_force_matrix.deinit(device);
 
         var particles_back = try Buffer.new(ctx, .{
             .size = @sizeOf(Particle) * v.num_particles,
@@ -342,6 +358,8 @@ pub const ResourceManager = struct {
             .uniform_buf = uniform_buf,
             .particles_draw_call_buf = draw_call,
             .scratch = scratch,
+            .particle_types = particle_types,
+            .particle_force_matrix = particle_force_matrix,
             .particles_back = particles_back,
             .particles = particles,
             .particle_bins_back = particle_bins_back,
@@ -353,6 +371,8 @@ pub const ResourceManager = struct {
         self.uniform_buf.deinit(device);
         self.particles_draw_call_buf.deinit(device);
         self.scratch.deinit(device);
+        self.particle_types.deinit(device);
+        self.particle_force_matrix.deinit(device);
         self.particles_back.deinit(device);
         self.particles.deinit(device);
         self.particle_bins_back.deinit(device);
@@ -369,6 +389,8 @@ pub const ResourceManager = struct {
         try add_to_set(builder, &self.uniform_buf, .camera);
         try add_to_set(builder, &self.particles_draw_call_buf, .particles_draw_call);
         try add_to_set(builder, &self.scratch, .scratch);
+        try add_to_set(builder, &self.particle_types, .particle_types);
+        try add_to_set(builder, &self.particle_force_matrix, .particle_force_matrix);
         try add_to_set(builder, &self.particles_back, .particles_back);
         try add_to_set(builder, &self.particles, .particles);
         try add_to_set(builder, &self.particle_bins_back, .particle_bins_back);
@@ -377,6 +399,8 @@ pub const ResourceManager = struct {
         try add_to_set(builder_back, &self.uniform_buf, .camera);
         try add_to_set(builder_back, &self.particles_draw_call_buf, .particles_draw_call);
         try add_to_set(builder_back, &self.scratch, .scratch);
+        try add_to_set(builder_back, &self.particle_types, .particle_types);
+        try add_to_set(builder_back, &self.particle_force_matrix, .particle_force_matrix);
         try add_to_set(builder_back, &self.particles_back, .particles_back);
         try add_to_set(builder_back, &self.particles, .particles);
         try add_to_set(builder_back, &self.particle_bins, .particle_bins_back);
@@ -396,6 +420,8 @@ pub const ResourceManager = struct {
         camera,
         particles_draw_call,
         scratch,
+        particle_types,
+        particle_force_matrix,
         particles_back,
         particles,
         particle_bins_back,
@@ -405,14 +431,32 @@ pub const ResourceManager = struct {
             return @intFromEnum(self);
         }
     };
-    pub const Particle = extern struct {
-        pos: math.Vec2,
-        vel: math.Vec2,
-        color: u32,
+    pub const ParticleType = extern struct {
+        color: Vec4,
+        visual_radius: f32,
 
         _pad0: u32 = 0,
         _pad1: u32 = 0,
         _pad2: u32 = 0,
+    };
+    pub const ParticleForce = extern struct {
+        attraction_strength: f32,
+        attraction_radius: f32,
+        collision_strength: f32,
+        collision_radius: f32,
+
+        // _pad0: u32 = 0,
+        // _pad1: u32 = 0,
+        // _pad2: u32 = 0,
+    };
+    pub const Particle = extern struct {
+        pos: math.Vec2,
+        vel: math.Vec2,
+        type_index: u32,
+
+        // _pad0: u32 = 0,
+        // _pad1: u32 = 0,
+        // _pad2: u32 = 0,
     };
     pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
@@ -435,6 +479,7 @@ pub const ResourceManager = struct {
             grid_size: u32 = 32,
             zoom: f32 = 1.0,
             friction: f32,
+            particle_type_count: u32 = 0,
             particle_count: u32 = 0,
             spawn_count: u32,
             bin_size: i32,
@@ -460,6 +505,7 @@ pub const ResourceManager = struct {
             state.params.particle_count = @min(particle_count + spawn_count, state.max_particle_count);
             state.params.spawn_count = state.params.particle_count - particle_count;
             state.params.friction = @exp(-state.friction * state.ticker.scaled.delta);
+            state.params.particle_type_count = state.particle_count;
 
             state.params.bin_size = state.bin_size;
             state.params.bin_buf_size_x = math.divide_roof(cast(i32, state.monitor_rez.width), state.params.bin_size);
@@ -540,6 +586,8 @@ pub const RendererState = struct {
         var gen = try utils_mod.ShaderUtils.GlslBindingGenerator.init();
         defer gen.deinit();
         try gen.add_struct("DrawCall", ResourceManager.DrawCall);
+        try gen.add_struct("ParticleType", ResourceManager.ParticleType);
+        try gen.add_struct("ParticleForce", ResourceManager.ParticleForce);
         try gen.add_struct("Particle", ResourceManager.Particle);
         try gen.add_struct("Params", ResourceManager.Uniforms.Params);
         try gen.add_struct("PushConstants", ResourceManager.PushConstants);
@@ -961,6 +1009,8 @@ pub const AppState = struct {
     focus: bool = false,
 
     max_particle_count: u32 = 4500,
+    max_particle_type_count: u32 = 10,
+    particle_count: u32 = 2,
     spawn_count: u32 = 0,
     friction: f32 = 0,
     bin_size: i32 = 8 * 16,

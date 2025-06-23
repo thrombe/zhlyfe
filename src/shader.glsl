@@ -5,7 +5,6 @@
 
 struct GpuState {
     int particle_count;
-    int prefix_sum_pass;
 
     int bad_flag;
 
@@ -41,6 +40,12 @@ layout(set = 0, binding = _bind_camera) uniform Ubo {
 layout(set = 0, binding = _bind_scratch) bufffer ScratchBuffer {
     GpuState state;
 };
+layout(set = 0, binding = _bind_particle_types) bufffer ParticleTypeBuffer {
+    ParticleType particle_types[];
+};
+layout(set = 0, binding = _bind_particle_force_matrix) bufffer ParticleForceMatrixBuffer {
+    ParticleForce particle_force_matrix[];
+};
 layout(set = 0, binding = _bind_particles_back) bufffer ParticleBackBuffer {
     Particle particles_back[];
 };
@@ -61,6 +66,10 @@ void set_seed(int id) {
     seed = int(ubo.frame.frame) ^ id ^ floatBitsToInt(ubo.frame.time);
 }
 
+ivec2 get_bin_pos(vec2 pos) {
+    return clamp(ivec2(pos / ubo.params.bin_size), ivec2(0, 0), ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
+}
+
 #ifdef SPAWN_PARTICLES_PASS
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
@@ -76,7 +85,7 @@ void set_seed(int id) {
         Particle p;
         p.pos = vec2(random(), random()) * mres;
         p.vel = 50.0 * (vec2(random(), random()) - 0.5) * 2.0;
-        p.color = rgba_encode_u32(vec4(random(), random(), random(), 1.0));
+        p.type_index = clamp(int(random() * ubo.params.particle_type_count), 0, ubo.params.particle_type_count - 1);
         particles[index] = p;
 
         if (id > 0) {
@@ -107,7 +116,6 @@ void set_seed(int id) {
         particle_bins_back[id] = 0;
 
         if (id == 0) {
-            state.prefix_sum_pass = 0;
             state.bad_flag = 0;
         }
     }
@@ -124,8 +132,7 @@ void set_seed(int id) {
 
         Particle p = particles[id];
 
-        ivec2 pos = ivec2(p.pos / ubo.params.bin_size);
-        pos = clamp(pos, ivec2(0, 0), ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
+        ivec2 pos = get_bin_pos(p.pos);
         int index = clamp(pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int _count = atomicAdd(particle_bins_back[index], 1);
@@ -154,16 +161,6 @@ void set_seed(int id) {
             int a = particle_bins_back[id];
             particle_bins[id] = a;
         }
-
-        // for (int i=1; i<=1; i<<=1) {
-        //     int step = i << state.prefix_sum_pass;
-        //     // particle_bins[step] = 100000;
-        //     if (id >= step) {
-        //         int a = particle_bins_back[id];
-        //         int b = particle_bins_back[id - step];
-        //         particle_bins[id] = a + b;
-        //     }
-        // }
     }
 #endif // BIN_PREFIX_SUM_PASS
 
@@ -178,8 +175,7 @@ void set_seed(int id) {
 
         Particle p = particles[id];
 
-        ivec2 pos = ivec2(p.pos / ubo.params.bin_size);
-        pos = clamp(pos, ivec2(0, 0), ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
+        ivec2 pos = get_bin_pos(p.pos);
         int index = clamp(pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int bin_index = atomicAdd(particle_bins[index], -1);
@@ -198,9 +194,50 @@ void set_seed(int id) {
             return;
         }
 
+        // 2 ways to compute forces
+        //  - first is to compute and store forces on particles in 1 pass and update vel, pos in another
+        //    - it's possible to have different radius for forces, and check only the bins that would actually matter.
+        //    - less friendly to gpus cuz different cores in a warp need different amounts of compute.
+        //  - second is to assume a max influence distance and check all in the range.
+        //    - if we have a max radius to forces, we end up wasting some checks when (max radius across all types >> max radius for 1 type)
+
         Particle p = particles_back[id];
+        // ParticleType pt = particle_types[p.type_index];
+
+        ivec2 bpos = get_bin_pos(p.pos);
+        ivec2 bpos_min = max(bpos - 1, ivec2(0));
+        ivec2 bpos_max = min(bpos + 1, ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
+
+        vec2 pforce = vec2(0.0);
+        for (int y = bpos_min.y; y <= bpos_max.y; y++) {
+            for (int x = bpos_min.x; x <= bpos_max.x; x++) {
+                int index = y * ubo.params.bin_buf_size_x + x;
+                int offset_start = particle_bins[index];
+                // TODO: make sure last one stores the thing
+                int offset_end = particle_bins[index + 1];
+
+                for (int i = offset_start; i < offset_end; i++) {
+                    if (i == id) {
+                        continue;
+                    }
+
+                    Particle o = particles_back[i];
+                    // ParticleType ot = particle_types[o.type_index];
+
+                    ParticleForce forces = particle_force_matrix[p.type_index * ubo.params.particle_type_count + o.type_index];
+                    f32 dist = length(o.pos - p.pos);
+
+                    if (dist > 0.0) {
+                        vec2 dir = (o.pos - p.pos) / dist;
+                        pforce += forces.attraction_strength * max(0.0, 1.0 - dist / forces.attraction_radius) * dir;
+                        pforce -= forces.collision_strength * max(0.0, 1.0 - dist / forces.collision_radius) * dir;
+                    }
+                }
+            }
+        }
 
         p.vel *= ubo.params.friction;
+        p.vel += pforce * ubo.frame.deltatime;
         p.pos += p.vel * ubo.frame.deltatime;
 
         if (p.pos.x < 0) {
@@ -224,18 +261,19 @@ void set_seed(int id) {
     layout(location = 0) out vec4 vcolor;
     layout(location = 1) out vec2 vuv;
     void main() {
-        int instance_index = gl_VertexIndex / 6;
+        int particle_index = gl_VertexIndex / 6;
         int vert_index = gl_VertexIndex % 6;
 
-        Particle instance = particles[instance_index];
+        Particle p = particles[particle_index];
+        ParticleType t = particle_types[p.type_index];
         vec2 vpos = quad_verts[vert_index].xy;
 
         float zoom = ubo.params.zoom;
-        float particle_size = ubo.params.particle_size;
+        float particle_size = t.visual_size;
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        vec2 pos = instance.pos + ubo.camera.eye.xy;
+        vec2 pos = p.pos + ubo.camera.eye.xy;
         pos += vpos * 0.5 * particle_size;
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
@@ -243,7 +281,7 @@ void set_seed(int id) {
         pos *= 2.0;
         gl_Position = vec4(pos, 0.0, 1.0);
 
-        vcolor = rgba_decode_u32(instance.color);
+        vcolor = t.color;
         vuv = quad_uvs[vert_index];
     }
 #endif // RENDER_VERT_PASS

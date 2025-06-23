@@ -61,6 +61,10 @@ ivec3 to3D(int id, int side) {
     return pos;
 }
 
+int divide_roof(int a, int b) {
+    return a / b + int(mod(a, b) > 0);
+}
+
 uint rgba_encode_u32(vec4 color) {
     uint r = uint(color.r * 255.0);
     uint g = uint(color.g * 255.0);
