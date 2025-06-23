@@ -102,6 +102,7 @@ pub fn init(engine: *Engine) !@This() {
     });
     errdefer depth.deinit(device);
 
+    // TODO: pass params somehow or support dynamic params
     var resources = try ResourceManager.init(engine, cmd_pool, .{});
     errdefer resources.deinit(device);
 
@@ -202,7 +203,7 @@ pub fn tick(
         self.telemetry.begin_sample(@src(), ".gpu_buffer_uploads");
         defer self.telemetry.end_sample();
 
-        try self.resources.update_uniforms(&ctx.device);
+        try self.resources.upload(&ctx.device);
     }
 
     if (renderer_state.stages.update()) {
@@ -270,13 +271,16 @@ pub const ResourceManager = struct {
     uniform: Uniforms,
     uniform_buf: Buffer,
 
-    scratch: Buffer,
-    particle_types: Buffer,
-    particle_force_matrix: Buffer,
-    particles_back: Buffer,
-    particles: Buffer,
-    particle_bins_back: Buffer,
-    particle_bins: Buffer,
+    particle_types: []ParticleType,
+    particle_force_matrix: []ParticleForce,
+
+    scratch_buf: Buffer,
+    particle_types_buf: Buffer,
+    particle_force_matrix_buf: Buffer,
+    particles_back_buf: Buffer,
+    particles_buf: Buffer,
+    particle_bins_back_buf: Buffer,
+    particle_bins_buf: Buffer,
     // updated from gpu side
     particles_draw_call_buf: Buffer,
 
@@ -303,18 +307,25 @@ pub const ResourceManager = struct {
         }, std.mem.zeroes(Uniforms), pool);
         errdefer uniform_buf.deinit(device);
 
-        // TODO: initialize particle types and particle force matrix
-        var particle_types = try Buffer.new(ctx, .{
-            .size = @sizeOf(ParticleType) * v.particle_type_count,
-            .usage = .{ .storage_buffer_bit = true },
-        });
-        errdefer particle_types.deinit(device);
+        const particle_types = try allocator.alloc(ParticleType, v.particle_type_count);
+        errdefer allocator.free(particle_types);
+        @memset(particle_types, std.mem.zeroes(ParticleType));
 
-        var particle_force_matrix = try Buffer.new(ctx, .{
-            .size = @sizeOf(ParticleForce) * v.particle_type_count * v.particle_type_count,
+        const particle_force_matrix = try allocator.alloc(ParticleForce, v.particle_type_count * v.particle_type_count);
+        errdefer allocator.free(particle_force_matrix);
+        @memset(particle_force_matrix, std.mem.zeroes(ParticleForce));
+
+        var particle_types_buf = try Buffer.new_from_slice(ctx, .{
             .usage = .{ .storage_buffer_bit = true },
-        });
-        errdefer particle_force_matrix.deinit(device);
+            .memory_type = .{ .device_local_bit = true, .host_visible_bit = true, .host_coherent_bit = true },
+        }, particle_types, pool);
+        errdefer particle_types_buf.deinit(device);
+
+        var particle_force_matrix_buf = try Buffer.new_from_slice(ctx, .{
+            .usage = .{ .storage_buffer_bit = true },
+            .memory_type = .{ .device_local_bit = true, .host_visible_bit = true, .host_coherent_bit = true },
+        }, particle_force_matrix, pool);
+        errdefer particle_force_matrix_buf.deinit(device);
 
         var particles_back = try Buffer.new(ctx, .{
             .size = @sizeOf(Particle) * v.num_particles,
@@ -355,30 +366,34 @@ pub const ResourceManager = struct {
         }, std.mem.zeroes(DrawCall), pool);
         errdefer draw_call.deinit(device);
 
-        return .{
+        return @This(){
             .uniform = std.mem.zeroes(Uniforms),
             .uniform_buf = uniform_buf,
             .particles_draw_call_buf = draw_call,
-            .scratch = scratch,
+            .scratch_buf = scratch,
             .particle_types = particle_types,
             .particle_force_matrix = particle_force_matrix,
-            .particles_back = particles_back,
-            .particles = particles,
-            .particle_bins_back = particle_bins_back,
-            .particle_bins = particle_bins,
+            .particle_types_buf = particle_types_buf,
+            .particle_force_matrix_buf = particle_force_matrix_buf,
+            .particles_back_buf = particles_back,
+            .particles_buf = particles,
+            .particle_bins_back_buf = particle_bins_back,
+            .particle_bins_buf = particle_bins,
         };
     }
 
     pub fn deinit(self: *@This(), device: *Device) void {
         self.uniform_buf.deinit(device);
         self.particles_draw_call_buf.deinit(device);
-        self.scratch.deinit(device);
-        self.particle_types.deinit(device);
-        self.particle_force_matrix.deinit(device);
-        self.particles_back.deinit(device);
-        self.particles.deinit(device);
-        self.particle_bins_back.deinit(device);
-        self.particle_bins.deinit(device);
+        self.scratch_buf.deinit(device);
+        allocator.free(self.particle_types);
+        self.particle_types_buf.deinit(device);
+        allocator.free(self.particle_force_matrix);
+        self.particle_force_matrix_buf.deinit(device);
+        self.particles_back_buf.deinit(device);
+        self.particles_buf.deinit(device);
+        self.particle_bins_back_buf.deinit(device);
+        self.particle_bins_buf.deinit(device);
     }
 
     pub fn add_binds(self: *@This(), builder: *render_utils.DescriptorSet.Builder, builder_back: *render_utils.DescriptorSet.Builder) !void {
@@ -390,32 +405,58 @@ pub const ResourceManager = struct {
 
         try add_to_set(builder, &self.uniform_buf, .camera);
         try add_to_set(builder, &self.particles_draw_call_buf, .particles_draw_call);
-        try add_to_set(builder, &self.scratch, .scratch);
-        try add_to_set(builder, &self.particle_types, .particle_types);
-        try add_to_set(builder, &self.particle_force_matrix, .particle_force_matrix);
-        try add_to_set(builder, &self.particles_back, .particles_back);
-        try add_to_set(builder, &self.particles, .particles);
-        try add_to_set(builder, &self.particle_bins_back, .particle_bins_back);
-        try add_to_set(builder, &self.particle_bins, .particle_bins);
+        try add_to_set(builder, &self.scratch_buf, .scratch);
+        try add_to_set(builder, &self.particle_types_buf, .particle_types);
+        try add_to_set(builder, &self.particle_force_matrix_buf, .particle_force_matrix);
+        try add_to_set(builder, &self.particles_back_buf, .particles_back);
+        try add_to_set(builder, &self.particles_buf, .particles);
+        try add_to_set(builder, &self.particle_bins_back_buf, .particle_bins_back);
+        try add_to_set(builder, &self.particle_bins_buf, .particle_bins);
 
         try add_to_set(builder_back, &self.uniform_buf, .camera);
         try add_to_set(builder_back, &self.particles_draw_call_buf, .particles_draw_call);
-        try add_to_set(builder_back, &self.scratch, .scratch);
-        try add_to_set(builder_back, &self.particle_types, .particle_types);
-        try add_to_set(builder_back, &self.particle_force_matrix, .particle_force_matrix);
-        try add_to_set(builder_back, &self.particles_back, .particles_back);
-        try add_to_set(builder_back, &self.particles, .particles);
-        try add_to_set(builder_back, &self.particle_bins, .particle_bins_back);
-        try add_to_set(builder_back, &self.particle_bins_back, .particle_bins);
+        try add_to_set(builder_back, &self.scratch_buf, .scratch);
+        try add_to_set(builder_back, &self.particle_types_buf, .particle_types);
+        try add_to_set(builder_back, &self.particle_force_matrix_buf, .particle_force_matrix);
+        try add_to_set(builder_back, &self.particles_back_buf, .particles_back);
+        try add_to_set(builder_back, &self.particles_buf, .particles);
+        try add_to_set(builder_back, &self.particle_bins_buf, .particle_bins_back);
+        try add_to_set(builder_back, &self.particle_bins_back_buf, .particle_bins);
     }
 
-    pub fn update_uniforms(self: *@This(), device: *Device) !void {
+    pub fn upload(self: *@This(), device: *Device) !void {
+        try self.update_uniforms(device);
+        try self.update_particle_types(device);
+        try self.update_force_matrix(device);
+    }
+
+    fn update_uniforms(self: *@This(), device: *Device) !void {
         const maybe_mapped = try device.mapMemory(self.uniform_buf.memory, 0, vk.WHOLE_SIZE, .{});
         const mapped = maybe_mapped orelse return error.MappingMemoryFailed;
         defer device.unmapMemory(self.uniform_buf.memory);
 
         const mem: *Uniforms = @ptrCast(@alignCast(mapped));
         mem.* = self.uniform;
+    }
+
+    fn update_particle_types(self: *@This(), device: *Device) !void {
+        const maybe_mapped = try device.mapMemory(self.particle_types_buf.memory, 0, vk.WHOLE_SIZE, .{});
+        const mapped = maybe_mapped orelse return error.MappingMemoryFailed;
+        defer device.unmapMemory(self.particle_types_buf.memory);
+
+        const buf = self.particle_types;
+        const mem: [*c]ParticleType = @ptrCast(@alignCast(mapped));
+        @memcpy(mem[0..buf.len], buf);
+    }
+
+    fn update_force_matrix(self: *@This(), device: *Device) !void {
+        const maybe_mapped = try device.mapMemory(self.particle_force_matrix_buf.memory, 0, vk.WHOLE_SIZE, .{});
+        const mapped = maybe_mapped orelse return error.MappingMemoryFailed;
+        defer device.unmapMemory(self.particle_force_matrix_buf.memory);
+
+        const buf = self.particle_force_matrix;
+        const mem: [*c]ParticleForce = @ptrCast(@alignCast(mapped));
+        @memcpy(mem[0..buf.len], buf);
     }
 
     pub const UniformBinds = enum(u32) {
