@@ -257,8 +257,7 @@ void set_seed(int id) {
         float distanceFromCenter = length(vuv.xy - 0.5);
         float mask = 1.0 - smoothstep(0.5 - 0.1/zoom, 0.5, distanceFromCenter);
         // mask = pow(1.0 - distanceFromCenter, 4.5) * mask;
-        mask = 1.0;
-        fcolor = vec4(vec3(vcolor.x, vcolor.y, vcolor.z), 1.0);
+        fcolor = vec4(vec3(0.2, vcolor.y, vcolor.z), vcolor.a * mask);
     }
 #endif // RENDER_FRAG_PASS
 
