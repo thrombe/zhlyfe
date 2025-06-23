@@ -1148,7 +1148,7 @@ pub const AppState = struct {
 
             const imgui_io = &c.ImGui_GetIO()[0];
             if (imgui_io.WantCaptureMouse) {
-                // mouse.* = std.mem.zeroes(@TypeOf(mouse));
+                mouse.* = std.mem.zeroes(@TypeOf(input.mouse));
                 mouse.x = input.mouse.x;
                 mouse.y = input.mouse.y;
                 mouse.left = .none;
