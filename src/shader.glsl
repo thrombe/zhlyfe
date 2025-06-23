@@ -108,7 +108,8 @@ ivec2 get_bin_pos(vec2 pos) {
     void main() {
         int id = global_id;
 
-        if (id >= ubo.params.bin_buf_size) {
+        // 1 larger then the buffer to store capacities
+        if (id > ubo.params.bin_buf_size) {
             return;
         }
 
@@ -148,7 +149,8 @@ ivec2 get_bin_pos(vec2 pos) {
     void main() {
         int id = global_id;
 
-        if (id >= ubo.params.bin_buf_size) {
+        // 1 larger then the buffer to store capacities
+        if (id > ubo.params.bin_buf_size) {
             return;
         }
 
@@ -213,7 +215,6 @@ ivec2 get_bin_pos(vec2 pos) {
             for (int x = bpos_min.x; x <= bpos_max.x; x++) {
                 int index = y * ubo.params.bin_buf_size_x + x;
                 int offset_start = particle_bins[index];
-                // TODO: make sure last one stores the thing
                 int offset_end = particle_bins[index + 1];
 
                 for (int i = offset_start; i < offset_end; i++) {

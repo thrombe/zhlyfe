@@ -328,15 +328,17 @@ pub const ResourceManager = struct {
         });
         errdefer particles.deinit(device);
 
+        // TODO: better bin buffer sizes
         const res = .{ .width = @as(u32, 1000), .height = @as(u32, 1000) };
+        // 1 larger than the max number of bins
         var particle_bins_back = try Buffer.new(ctx, .{
-            .size = @sizeOf(i32) * res.width * res.height,
+            .size = @sizeOf(i32) * (1 + res.width * res.height),
             .usage = .{ .storage_buffer_bit = true },
         });
         errdefer particle_bins_back.deinit(device);
 
         var particle_bins = try Buffer.new(ctx, .{
-            .size = @sizeOf(i32) * res.width * res.height,
+            .size = @sizeOf(i32) * (1 + res.width * res.height),
             .usage = .{ .storage_buffer_bit = true },
         });
         errdefer particle_bins.deinit(device);
@@ -889,7 +891,8 @@ pub const RendererState = struct {
             constants.* = .{ .reduce_step = reduce_step };
             cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
 
-            cmdbuf.dispatch(device, .{ .x = cast(u32, app_state.params.bin_buf_size) });
+            // 1 larger then the buffer to store capacities
+            cmdbuf.dispatch(device, .{ .x = cast(u32, app_state.params.bin_buf_size + 1) });
             cmdbuf.memBarrier(device, .{});
 
             // std.debug.print("{any} {any}\n", .{ reduce_step, app_state.params.bin_buf_size - (@as(i32, 1) << reduce_step) });
