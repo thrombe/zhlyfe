@@ -285,7 +285,7 @@ pub const ResourceManager = struct {
     particles_draw_call_buf: Buffer,
 
     pub fn init(engine: *Engine, pool: vk.CommandPool, v: struct {
-        num_particles: u32 = 5000,
+        num_particles: u32 = 200000,
         particle_type_count: u32 = 10,
     }) !@This() {
         const ctx = &engine.graphics;
@@ -311,9 +311,13 @@ pub const ResourceManager = struct {
         errdefer allocator.free(particle_types);
         @memset(particle_types, std.mem.zeroes(ParticleType));
 
+        @memset(particle_types, ParticleType{ .color = .splat(1.0), .visual_radius = 20 });
+
         const particle_force_matrix = try allocator.alloc(ParticleForce, v.particle_type_count * v.particle_type_count);
         errdefer allocator.free(particle_force_matrix);
         @memset(particle_force_matrix, std.mem.zeroes(ParticleForce));
+
+        @memset(particle_force_matrix, ParticleForce{ .attraction_strength = 0, .attraction_radius = 50, .collision_strength = 150, .collision_radius = 10 });
 
         var particle_types_buf = try Buffer.new_from_slice(ctx, .{
             .usage = .{ .storage_buffer_bit = true },
@@ -548,7 +552,7 @@ pub const ResourceManager = struct {
             state.params.particle_count = @min(particle_count + spawn_count, state.max_particle_count);
             state.params.spawn_count = state.params.particle_count - particle_count;
             state.params.friction = @exp(-state.friction * state.ticker.scaled.delta);
-            state.params.particle_type_count = state.particle_count;
+            state.params.particle_type_count = state.particle_type_count;
 
             state.params.bin_size = state.bin_size;
             state.params.bin_buf_size_x = math.divide_roof(cast(i32, state.monitor_rez.width), state.params.bin_size);
@@ -1052,9 +1056,9 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
-    max_particle_count: u32 = 4500,
+    max_particle_count: u32 = 190000,
     max_particle_type_count: u32 = 10,
-    particle_count: u32 = 2,
+    particle_type_count: u32 = 5,
     spawn_count: u32 = 0,
     friction: f32 = 0,
     bin_size: i32 = 8 * 16,
@@ -1260,7 +1264,8 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0.001, 2.0);
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
-        reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 1.0) or reset;
+        _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
+        reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 5.0) or reset;
 
         var sim_speed = state.ticker.speed.perc;
         if (c.ImGui_SliderFloat("simulation_speed", @ptrCast(&sim_speed), 0.0, 5.0)) {
@@ -1272,6 +1277,7 @@ pub const GuiState = struct {
 
         c.ImGui_Text("scaled time: %.3f", state.ticker.scaled.time_f);
         c.ImGui_Text("physics acctime/step: %.3f", state.ticker.simulation.acctime_f / state.ticker.simulation.step_f);
+        c.ImGui_Text("particle count: %d", state.params.particle_count);
 
         {
             c.ImGui_PushID("particle_types");
@@ -1313,9 +1319,9 @@ pub const GuiState = struct {
     }
 
     fn editParticleForce(_: *@This(), e: *ResourceManager.ParticleForce) void {
-        _ = c.ImGui_SliderFloat("attraction_strength", &e.attraction_strength, -200, 200);
-        _ = c.ImGui_SliderFloat("attraction_radius", &e.attraction_radius, 0, 128);
-        _ = c.ImGui_SliderFloat("collision_strength", &e.collision_strength, -200, 200);
-        _ = c.ImGui_SliderFloat("collision_radius", &e.collision_radius, 0, 128);
+        _ = c.ImGui_SliderFloat("attraction_strength", &e.attraction_strength, -20, 20);
+        // _ = c.ImGui_SliderFloat("attraction_radius", &e.attraction_radius, 0, 128);
+        // _ = c.ImGui_SliderFloat("collision_strength", &e.collision_strength, -200, 200);
+        // _ = c.ImGui_SliderFloat("collision_radius", &e.collision_radius, 0, 128);
     }
 };

@@ -228,11 +228,25 @@ ivec2 get_bin_pos(vec2 pos) {
                     ParticleForce forces = particle_force_matrix[p.type_index * ubo.params.particle_type_count + o.type_index];
                     f32 dist = length(o.pos - p.pos);
 
-                    if (dist > 0.0) {
-                        vec2 dir = (o.pos - p.pos) / dist;
-                        pforce += forces.attraction_strength * max(0.0, 1.0 - dist / forces.attraction_radius) * dir;
-                        pforce -= forces.collision_strength * max(0.0, 1.0 - dist / forces.collision_radius) * dir;
+                    if (dist <= 0.0) {
+                        continue;
                     }
+                    f32 a = 15;
+                    f32 b = 25;
+                    f32 c = 50;
+                    vec2 dir = (o.pos - p.pos) / dist;
+                    if (dist < a) {
+                        pforce -= 140 * (1.0 - dist / a) * dir;
+                    } else if (dist < b) {
+                        pforce += forces.attraction_strength * ((dist - a) / (b - a)) * dir;
+                    } else if (dist < c) {
+                        pforce += forces.attraction_strength * (1.0 - (dist - b) / (c - b)) * dir;
+                    }
+                    // if (dist > 0.0) {
+                    //     vec2 dir = (o.pos - p.pos) / dist;
+                    //     pforce += forces.attraction_strength * max(0.0, 1.0 - dist / forces.attraction_radius) * dir;
+                    //     pforce -= forces.collision_strength * max(0.0, 1.0 - dist / forces.collision_radius) * dir;
+                    // }
                 }
             }
         }
