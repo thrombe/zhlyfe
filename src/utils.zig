@@ -288,6 +288,7 @@ pub const SimulationTicker = struct {
     } = .{},
 
     simulation: struct {
+        steps_per_sec: u32 = 60,
         step_f: f32 = 1.0 / 60.0,
         step_ns: u64 = std.time.ns_per_s / 60,
 
@@ -325,6 +326,12 @@ pub const SimulationTicker = struct {
                 .timer = try std.time.Timer.start(),
             },
         };
+    }
+
+    pub fn set_steps_per_sec(self: *@This(), num: u32) void {
+        self.simulation.steps_per_sec = num;
+        self.simulation.step_f = 1.0 / @as(f32, @floatFromInt(num));
+        self.simulation.step_ns = std.time.ns_per_s / @as(u64, @intCast(num));
     }
 
     pub fn tick_real(self: *@This()) void {

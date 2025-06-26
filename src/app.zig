@@ -285,7 +285,7 @@ pub const ResourceManager = struct {
     particles_draw_call_buf: Buffer,
 
     pub fn init(engine: *Engine, pool: vk.CommandPool, v: struct {
-        num_particles: u32 = 200000,
+        num_particles: u32 = 500000,
         particle_type_count: u32 = 10,
     }) !@This() {
         const ctx = &engine.graphics;
@@ -522,6 +522,7 @@ pub const ResourceManager = struct {
         params: Params,
 
         const Params = extern struct {
+            delta: f32 = 0,
             particle_size: u32 = 16,
             grid_size: u32 = 32,
             zoom: f32 = 1.0,
@@ -535,7 +536,7 @@ pub const ResourceManager = struct {
             bin_buf_size_y: i32,
 
             _pad0: u32 = 0,
-            _pad1: u32 = 0,
+            // _pad1: u32 = 0,
             // _pad2: u32 = 0,
         };
 
@@ -560,6 +561,8 @@ pub const ResourceManager = struct {
             state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y;
             // TODO: don't fuse every frame man
             _ = state.cmdbuf_fuse.fuse();
+
+            state.params.delta = state.ticker.simulation.step_f;
 
             if (spawn_count > 0) _ = state.cmdbuf_fuse.fuse();
 
@@ -1056,7 +1059,7 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
-    max_particle_count: u32 = 190000,
+    max_particle_count: u32 = 400000,
     max_particle_type_count: u32 = 10,
     particle_type_count: u32 = 3,
     spawn_count: u32 = 0,
@@ -1271,6 +1274,11 @@ pub const GuiState = struct {
         if (c.ImGui_SliderFloat("simulation_speed", @ptrCast(&sim_speed), 0.0, 5.0)) {
             state.ticker.set_speed(sim_speed);
             state.ticker.drop_pending_simtime();
+        }
+
+        var steps = state.ticker.simulation.steps_per_sec;
+        if (c.ImGui_SliderInt("step per sec", @ptrCast(&steps), 1, 400)) {
+            state.ticker.set_steps_per_sec(steps);
         }
 
         reset = c.ImGui_Button("Reset render state") or reset;
