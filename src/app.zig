@@ -937,7 +937,7 @@ pub const RendererState = struct {
             cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
 
             // 1 larger then the buffer to store capacities
-            cmdbuf.dispatch(device, .{ .x = cast(u32, app_state.params.bin_buf_size + 1) });
+            cmdbuf.dispatch(device, .{ .x = math.divide_roof(cast(u32, app_state.params.bin_buf_size + 1), 64) });
             cmdbuf.memBarrier(device, .{});
 
             // std.debug.print("{any} {any}\n", .{ reduce_step, app_state.params.bin_buf_size - (@as(i32, 1) << reduce_step) });
