@@ -311,7 +311,7 @@ pub const ResourceManager = struct {
         errdefer allocator.free(particle_types);
         @memset(particle_types, std.mem.zeroes(ParticleType));
 
-        @memset(particle_types, ParticleType{ .color = .splat(1.0), .visual_radius = 20 });
+        @memset(particle_types, ParticleType{ .color = .splat(1.0), .visual_radius = 7 });
 
         const particle_force_matrix = try allocator.alloc(ParticleForce, v.particle_type_count * v.particle_type_count);
         errdefer allocator.free(particle_force_matrix);
@@ -1058,7 +1058,7 @@ pub const AppState = struct {
 
     max_particle_count: u32 = 190000,
     max_particle_type_count: u32 = 10,
-    particle_type_count: u32 = 5,
+    particle_type_count: u32 = 3,
     spawn_count: u32 = 0,
     friction: f32 = 0,
     bin_size: i32 = 8 * 16,

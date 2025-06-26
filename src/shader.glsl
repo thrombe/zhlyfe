@@ -232,8 +232,8 @@ ivec2 get_bin_pos(vec2 pos) {
                         continue;
                     }
                     f32 a = 15;
-                    f32 b = 25;
-                    f32 c = 50;
+                    f32 b = ubo.params.bin_size / 2.0;
+                    f32 c = ubo.params.bin_size;
                     vec2 dir = (o.pos - p.pos) / dist;
                     if (dist < a) {
                         pforce -= 140 * (1.0 - dist / a) * dir;
