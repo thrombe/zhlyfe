@@ -24,9 +24,12 @@
  };
 
  struct Particle {
-     vec2 pos;
-     vec2 vel;
+     vec3 pos;
+     vec3 vel;
      uint type_index;
+     uint _pad0;
+     uint _pad1;
+     uint _pad2;
  };
 
  struct Params {
@@ -42,7 +45,10 @@
      int bin_buf_size;
      int bin_buf_size_x;
      int bin_buf_size_y;
+     int bin_buf_size_z;
      uint _pad0;
+     uint _pad1;
+     uint _pad2;
  };
 
  struct PushConstants {

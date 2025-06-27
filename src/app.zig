@@ -347,7 +347,7 @@ pub const ResourceManager = struct {
         const res = .{ .width = @as(u32, 1000), .height = @as(u32, 1000) };
         // 1 larger than the max number of bins
         var particle_bins_back = try Buffer.new(ctx, .{
-            .size = @sizeOf(i32) * (1 + res.width * res.height),
+            .size = @sizeOf(i32) * (1 + res.width * res.height) * 5,
             .usage = .{ .storage_buffer_bit = true },
         });
         errdefer particle_bins_back.deinit(device);
@@ -497,8 +497,8 @@ pub const ResourceManager = struct {
         // _pad2: u32 = 0,
     };
     pub const Particle = extern struct {
-        pos: math.Vec2,
-        vel: math.Vec2,
+        pos: math.Vec3,
+        vel: math.Vec3,
         type_index: u32,
 
         _pad0: u32 = 0,
@@ -534,10 +534,11 @@ pub const ResourceManager = struct {
             bin_buf_size: i32,
             bin_buf_size_x: i32,
             bin_buf_size_y: i32,
+            bin_buf_size_z: i32,
 
             _pad0: u32 = 0,
-            // _pad1: u32 = 0,
-            // _pad2: u32 = 0,
+            _pad1: u32 = 0,
+            _pad2: u32 = 0,
         };
 
         fn from(
@@ -560,7 +561,8 @@ pub const ResourceManager = struct {
             state.params.bin_size = state.bin_size;
             state.params.bin_buf_size_x = math.divide_roof(cast(i32, state.monitor_rez.width), state.params.bin_size);
             state.params.bin_buf_size_y = math.divide_roof(cast(i32, state.monitor_rez.height), state.params.bin_size);
-            state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y;
+            state.params.bin_buf_size_z = state.bin_buf_size_z;
+            state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y * state.params.bin_buf_size_z;
             // TODO: don't fuse every frame man
             _ = state.cmdbuf_fuse.fuse();
 
@@ -1068,6 +1070,8 @@ pub const AppState = struct {
     spawn_count: u32 = 0,
     friction: f32 = 0,
     bin_size: i32 = 8 * 16,
+    bin_buf_size_z: i32 = 1,
+    bin_buf_size_z_max: i32 = 5,
     params: ResourceManager.Uniforms.Params = .{
         .spawn_count = 0,
         .friction = 0,
@@ -1076,6 +1080,7 @@ pub const AppState = struct {
         .bin_buf_size = 0,
         .bin_buf_size_x = 0,
         .bin_buf_size_y = 0,
+        .bin_buf_size_z = 0,
     },
     camera: ShaderUtils.Camera2D = .{ .eye = .{} },
 
@@ -1271,6 +1276,7 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
+        _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.bin_buf_size_z), 1, state.bin_buf_size_z_max);
         reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 5.0) or reset;
 
         var sim_speed = state.ticker.speed.perc;
@@ -1327,7 +1333,7 @@ pub const GuiState = struct {
     }
 
     fn editParticleForce(_: *@This(), e: *ResourceManager.ParticleForce) void {
-        _ = c.ImGui_SliderFloat("attraction_strength", &e.attraction_strength, -20, 20);
+        _ = c.ImGui_SliderFloat("attraction_strength", &e.attraction_strength, -100, 100);
         // _ = c.ImGui_SliderFloat("attraction_radius", &e.attraction_radius, 0, 128);
         // _ = c.ImGui_SliderFloat("collision_strength", &e.collision_strength, -200, 200);
         // _ = c.ImGui_SliderFloat("collision_radius", &e.collision_radius, 0, 128);

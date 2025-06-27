@@ -66,8 +66,8 @@ void set_seed(int id) {
     seed = int(ubo.frame.frame) ^ id ^ floatBitsToInt(ubo.frame.time);
 }
 
-ivec2 get_bin_pos(vec2 pos) {
-    return clamp(ivec2(pos / ubo.params.bin_size), ivec2(0, 0), ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
+ivec3 get_bin_pos(vec3 pos) {
+    return clamp(ivec3(pos / ubo.params.bin_size), ivec3(0, 0, 0), ivec3(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1, ubo.params.bin_buf_size_z - 1));
 }
 
 #ifdef SPAWN_PARTICLES_PASS
@@ -83,8 +83,8 @@ ivec2 get_bin_pos(vec2 pos) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         int index = atomicAdd(state.particle_count, 1);
         Particle p;
-        p.pos = vec2(random(), random()) * mres;
-        p.vel = 50.0 * (vec2(random(), random()) - 0.5) * 2.0;
+        p.pos = vec3(random(), random(), random()) * vec3(mres, float(ubo.params.bin_buf_size_z * ubo.params.bin_size));
+        p.vel = 50.0 * (vec3(random(), random(), random()) - 0.5) * 2.0;
         p.type_index = clamp(int(random() * ubo.params.particle_type_count), 0, ubo.params.particle_type_count - 1);
         particles[index] = p;
 
@@ -133,8 +133,8 @@ ivec2 get_bin_pos(vec2 pos) {
 
         Particle p = particles[id];
 
-        ivec2 pos = get_bin_pos(p.pos);
-        int index = clamp(pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
+        ivec3 pos = get_bin_pos(p.pos);
+        int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int _count = atomicAdd(particle_bins_back[index], 1);
     }
@@ -177,8 +177,8 @@ ivec2 get_bin_pos(vec2 pos) {
 
         Particle p = particles[id];
 
-        ivec2 pos = get_bin_pos(p.pos);
-        int index = clamp(pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
+        ivec3 pos = get_bin_pos(p.pos);
+        int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int bin_index = atomicAdd(particle_bins[index], -1);
 
@@ -206,47 +206,49 @@ ivec2 get_bin_pos(vec2 pos) {
         Particle p = particles_back[id];
         // ParticleType pt = particle_types[p.type_index];
 
-        ivec2 bpos = get_bin_pos(p.pos);
-        ivec2 bpos_min = max(bpos - 1, ivec2(0));
-        ivec2 bpos_max = min(bpos + 1, ivec2(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1));
+        ivec3 bpos = get_bin_pos(p.pos);
+        ivec3 bpos_min = max(bpos - 1, ivec3(0));
+        ivec3 bpos_max = min(bpos + 1, ivec3(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1, ubo.params.bin_buf_size_z - 1));
 
-        vec2 pforce = vec2(0.0);
-        for (int y = bpos_min.y; y <= bpos_max.y; y++) {
-            for (int x = bpos_min.x; x <= bpos_max.x; x++) {
-                int index = y * ubo.params.bin_buf_size_x + x;
-                int offset_start = particle_bins[index];
-                int offset_end = particle_bins[index + 1];
+        vec3 pforce = vec3(0.0);
+        for (int z = bpos_min.z; z <= bpos_max.z; z++) {
+            for (int y = bpos_min.y; y <= bpos_max.y; y++) {
+                for (int x = bpos_min.x; x <= bpos_max.x; x++) {
+                    int index = z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + y * ubo.params.bin_buf_size_x + x;
+                    int offset_start = particle_bins[index];
+                    int offset_end = particle_bins[index + 1];
 
-                for (int i = offset_start; i < offset_end; i++) {
-                    if (i == id) {
-                        continue;
+                    for (int i = offset_start; i < offset_end; i++) {
+                        if (i == id) {
+                            continue;
+                        }
+
+                        Particle o = particles_back[i];
+                        // ParticleType ot = particle_types[o.type_index];
+
+                        ParticleForce forces = particle_force_matrix[p.type_index * ubo.params.particle_type_count + o.type_index];
+                        f32 dist = length(o.pos - p.pos);
+
+                        if (dist <= 0.0) {
+                            continue;
+                        }
+                        f32 a = 45;
+                        f32 b = ubo.params.bin_size / 2.0;
+                        f32 c = ubo.params.bin_size;
+                        vec3 dir = (o.pos - p.pos) / dist;
+                        if (dist < a) {
+                            pforce -= 140 * (1.0 - dist / a) * dir;
+                        } else if (dist < b) {
+                            pforce += forces.attraction_strength * ((dist - a) / (b - a)) * dir;
+                        } else if (dist < c) {
+                            pforce += forces.attraction_strength * (1.0 - (dist - b) / (c - b)) * dir;
+                        }
+                        // if (dist > 0.0) {
+                        //     vec2 dir = (o.pos - p.pos) / dist;
+                        //     pforce += forces.attraction_strength * max(0.0, 1.0 - dist / forces.attraction_radius) * dir;
+                        //     pforce -= forces.collision_strength * max(0.0, 1.0 - dist / forces.collision_radius) * dir;
+                        // }
                     }
-
-                    Particle o = particles_back[i];
-                    // ParticleType ot = particle_types[o.type_index];
-
-                    ParticleForce forces = particle_force_matrix[p.type_index * ubo.params.particle_type_count + o.type_index];
-                    f32 dist = length(o.pos - p.pos);
-
-                    if (dist <= 0.0) {
-                        continue;
-                    }
-                    f32 a = 15;
-                    f32 b = ubo.params.bin_size / 2.0;
-                    f32 c = ubo.params.bin_size;
-                    vec2 dir = (o.pos - p.pos) / dist;
-                    if (dist < a) {
-                        pforce -= 140 * (1.0 - dist / a) * dir;
-                    } else if (dist < b) {
-                        pforce += forces.attraction_strength * ((dist - a) / (b - a)) * dir;
-                    } else if (dist < c) {
-                        pforce += forces.attraction_strength * (1.0 - (dist - b) / (c - b)) * dir;
-                    }
-                    // if (dist > 0.0) {
-                    //     vec2 dir = (o.pos - p.pos) / dist;
-                    //     pforce += forces.attraction_strength * max(0.0, 1.0 - dist / forces.attraction_radius) * dir;
-                    //     pforce -= forces.collision_strength * max(0.0, 1.0 - dist / forces.collision_radius) * dir;
-                    // }
                 }
             }
         }
@@ -261,11 +263,17 @@ ivec2 get_bin_pos(vec2 pos) {
         if (p.pos.y < 0) {
             p.pos.y = float(ubo.frame.monitor_height);
         }
+        if (p.pos.z < 0) {
+            p.pos.z = ubo.params.bin_buf_size_z * ubo.params.bin_size;
+        }
         if (p.pos.x > ubo.frame.monitor_width) {
             p.pos.x = 0;
         }
         if (p.pos.y > ubo.frame.monitor_height) {
             p.pos.y = 0;
+        }
+        if (p.pos.z > ubo.params.bin_buf_size_z * ubo.params.bin_size) {
+            p.pos.z = 0;
         }
 
         particles[id] = p;
@@ -288,8 +296,8 @@ ivec2 get_bin_pos(vec2 pos) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        vec2 pos = p.pos + ubo.camera.eye.xy;
-        pos += vpos * 0.5 * particle_size;
+        vec2 pos = p.pos.xy + ubo.camera.eye.xy;
+        pos += vpos * 0.5 * particle_size * (0.5 + 0.5 * p.pos.z / (ubo.params.bin_size * ubo.params.bin_buf_size_z));
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
         pos *= zoom;
