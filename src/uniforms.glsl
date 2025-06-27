@@ -30,6 +30,7 @@
  };
 
  struct Params {
+     float delta;
      uint particle_size;
      uint grid_size;
      float zoom;
@@ -42,7 +43,6 @@
      int bin_buf_size_x;
      int bin_buf_size_y;
      uint _pad0;
-     uint _pad1;
  };
 
  struct PushConstants {

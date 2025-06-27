@@ -546,13 +546,15 @@ pub const ResourceManager = struct {
         ) !@This() {
             // const inputs = window.input();
 
+            state.params.delta = state.ticker.scaled.delta / @as(f32, @floatFromInt(state.steps_per_frame));
+
             const spawn_count = @min(state.spawn_count, 64);
             state.spawn_count -= spawn_count;
 
             const particle_count = state.params.particle_count;
             state.params.particle_count = @min(particle_count + spawn_count, state.max_particle_count);
             state.params.spawn_count = state.params.particle_count - particle_count;
-            state.params.friction = @exp(-state.friction * state.ticker.scaled.delta);
+            state.params.friction = @exp(-state.friction * state.params.delta);
             state.params.particle_type_count = state.particle_type_count;
 
             state.params.bin_size = state.bin_size;
@@ -561,8 +563,6 @@ pub const ResourceManager = struct {
             state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y;
             // TODO: don't fuse every frame man
             _ = state.cmdbuf_fuse.fuse();
-
-            state.params.delta = state.ticker.simulation.step_f;
 
             if (spawn_count > 0) _ = state.cmdbuf_fuse.fuse();
 
@@ -902,70 +902,72 @@ pub const RendererState = struct {
 
         try cmdbuf.begin(device);
 
-        // spawn particles
-        cmdbuf.bindCompute(device, .{
-            .pipeline = self.pipelines.spawn_particles,
-            .desc_set = self.descriptor_set.set,
-        });
-        cmdbuf.dispatch(device, .{ .x = 1 });
-        cmdbuf.memBarrier(device, .{});
-
-        // bin reset
-        cmdbuf.bindCompute(device, .{
-            .pipeline = self.pipelines.bin_reset,
-            .desc_set = self.descriptor_set.set,
-        });
-        cmdbuf.dispatch(device, .{ .x = math.divide_roof(cast(u32, app_state.params.bin_buf_size), 64) });
-        cmdbuf.memBarrier(device, .{});
-
-        // count particles
-        cmdbuf.bindCompute(device, .{
-            .pipeline = self.pipelines.particle_count,
-            .desc_set = self.descriptor_set.set,
-        });
-        cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
-        cmdbuf.memBarrier(device, .{});
-
-        // bin count prefix sum
-        var reduce_step: u5 = 0;
-        while (true) : (reduce_step += 1) {
+        for (0..app_state.steps_per_frame) |_| {
+            // spawn particles
             cmdbuf.bindCompute(device, .{
-                .pipeline = self.pipelines.bin_prefix_sum,
+                .pipeline = self.pipelines.spawn_particles,
                 .desc_set = self.descriptor_set.set,
             });
-
-            // TODO: oof. don't use arena allocator. somehow retain this memory somewhere.
-            const constants = try alloc.create(ResourceManager.PushConstants);
-            constants.* = .{ .reduce_step = reduce_step };
-            cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
-
-            // 1 larger then the buffer to store capacities
-            cmdbuf.dispatch(device, .{ .x = math.divide_roof(cast(u32, app_state.params.bin_buf_size + 1), 64) });
+            cmdbuf.dispatch(device, .{ .x = 1 });
             cmdbuf.memBarrier(device, .{});
 
-            // std.debug.print("{any} {any}\n", .{ reduce_step, app_state.params.bin_buf_size - (@as(i32, 1) << reduce_step) });
-            if (app_state.params.bin_buf_size - (@as(i32, 1) << reduce_step) < 0) {
-                break;
+            // bin reset
+            cmdbuf.bindCompute(device, .{
+                .pipeline = self.pipelines.bin_reset,
+                .desc_set = self.descriptor_set.set,
+            });
+            cmdbuf.dispatch(device, .{ .x = math.divide_roof(cast(u32, app_state.params.bin_buf_size), 64) });
+            cmdbuf.memBarrier(device, .{});
+
+            // count particles
+            cmdbuf.bindCompute(device, .{
+                .pipeline = self.pipelines.particle_count,
+                .desc_set = self.descriptor_set.set,
+            });
+            cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
+            cmdbuf.memBarrier(device, .{});
+
+            // bin count prefix sum
+            var reduce_step: u5 = 0;
+            while (true) : (reduce_step += 1) {
+                cmdbuf.bindCompute(device, .{
+                    .pipeline = self.pipelines.bin_prefix_sum,
+                    .desc_set = self.descriptor_set.set,
+                });
+
+                // TODO: oof. don't use arena allocator. somehow retain this memory somewhere.
+                const constants = try alloc.create(ResourceManager.PushConstants);
+                constants.* = .{ .reduce_step = reduce_step };
+                cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
+
+                // 1 larger then the buffer to store capacities
+                cmdbuf.dispatch(device, .{ .x = math.divide_roof(cast(u32, app_state.params.bin_buf_size + 1), 64) });
+                cmdbuf.memBarrier(device, .{});
+
+                // std.debug.print("{any} {any}\n", .{ reduce_step, app_state.params.bin_buf_size - (@as(i32, 1) << reduce_step) });
+                if (app_state.params.bin_buf_size - (@as(i32, 1) << reduce_step) < 0) {
+                    break;
+                }
+
+                std.mem.swap(DescriptorSet, &self.descriptor_set, &self.descriptor_set_back);
             }
 
-            std.mem.swap(DescriptorSet, &self.descriptor_set, &self.descriptor_set_back);
+            // bin particles
+            cmdbuf.bindCompute(device, .{
+                .pipeline = self.pipelines.particle_binning,
+                .desc_set = self.descriptor_set.set,
+            });
+            cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
+            cmdbuf.memBarrier(device, .{});
+
+            // tick particles
+            cmdbuf.bindCompute(device, .{
+                .pipeline = self.pipelines.tick_particles,
+                .desc_set = self.descriptor_set.set,
+            });
+            cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
+            cmdbuf.memBarrier(device, .{});
         }
-
-        // bin particles
-        cmdbuf.bindCompute(device, .{
-            .pipeline = self.pipelines.particle_binning,
-            .desc_set = self.descriptor_set.set,
-        });
-        cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
-        cmdbuf.memBarrier(device, .{});
-
-        // tick particles
-        cmdbuf.bindCompute(device, .{
-            .pipeline = self.pipelines.tick_particles,
-            .desc_set = self.descriptor_set.set,
-        });
-        cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
-        cmdbuf.memBarrier(device, .{});
 
         cmdbuf.dynamic_render_begin(device, .{
             .image = app.screen_image.view,
@@ -1059,6 +1061,7 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
+    steps_per_frame: u32 = 1,
     max_particle_count: u32 = 400000,
     max_particle_type_count: u32 = 10,
     particle_type_count: u32 = 3,
@@ -1276,10 +1279,7 @@ pub const GuiState = struct {
             state.ticker.drop_pending_simtime();
         }
 
-        var steps = state.ticker.simulation.steps_per_sec;
-        if (c.ImGui_SliderInt("step per sec", @ptrCast(&steps), 1, 400)) {
-            state.ticker.set_steps_per_sec(steps);
-        }
+        _ = c.ImGui_SliderInt("step per frame", @ptrCast(&state.steps_per_frame), 1, 20);
 
         reset = c.ImGui_Button("Reset render state") or reset;
 

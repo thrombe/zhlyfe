@@ -252,8 +252,8 @@ ivec2 get_bin_pos(vec2 pos) {
         }
 
         p.vel *= ubo.params.friction;
-        p.vel += pforce * ubo.frame.deltatime;
-        p.pos += p.vel * ubo.frame.deltatime;
+        p.vel += pforce * ubo.params.delta;
+        p.pos += p.vel * ubo.params.delta;
 
         if (p.pos.x < 0) {
             p.pos.x = float(ubo.frame.monitor_width);
