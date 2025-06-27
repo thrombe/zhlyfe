@@ -501,9 +501,9 @@ pub const ResourceManager = struct {
         vel: math.Vec2,
         type_index: u32,
 
-        // _pad0: u32 = 0,
-        // _pad1: u32 = 0,
-        // _pad2: u32 = 0,
+        _pad0: u32 = 0,
+        _pad1: u32 = 0,
+        _pad2: u32 = 0,
     };
     pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
