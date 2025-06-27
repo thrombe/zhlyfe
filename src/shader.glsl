@@ -79,7 +79,7 @@ void set_seed(int id) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         int index = atomicAdd(state.particle_count, 1);
         Particle p;
-        p.pos = vec3(random(), random(), random()) * vec3(mres, float(ubo.params.bin_buf_size_z * ubo.params.bin_size));
+        p.pos = vec3(random(), random(), random()) * vec3(float(ubo.params.bin_buf_size_x), float(ubo.params.bin_buf_size_y), float(ubo.params.bin_buf_size_z)) * ubo.params.bin_size;
         p.vel = 50.0 * (vec3(random(), random(), random()) - 0.5) * 2.0;
         p.type_index = clamp(int(random() * ubo.params.particle_type_count), 0, ubo.params.particle_type_count - 1);
         particles[index] = p;
@@ -207,7 +207,7 @@ void set_seed(int id) {
         ivec3 bpos_min = bworld + bpos - 1;
         ivec3 bpos_max = bworld + bpos + 1;
 
-        ivec3 world = ivec3(ubo.frame.monitor_width, ubo.frame.monitor_height, ubo.params.bin_buf_size_z * ubo.params.bin_size);
+        ivec3 world = ivec3(ubo.params.bin_buf_size_x, ubo.params.bin_buf_size_y, ubo.params.bin_buf_size_z) * ubo.params.bin_size;
 
         vec3 pforce = vec3(0.0);
         for (int z = -1; z <= 1; z++) {
@@ -348,11 +348,11 @@ void set_seed(int id) {
         vec3 color = mix(vec3(0.2, 0.15, 0.35), vec3(0.25, 0.20, 0.40), checker);
 
         // debug renderr `particle_bins`
-        ivec2 pos = ivec2(int(coord.x), int(coord.y) + 3);
-        int index = pos.y * ubo.frame.width + pos.x;
-        if (ubo.params.bin_buf_size > index && index >= 0) {
-            color = vec3(float(particle_bins[index] > ubo.params.particle_count * mod(ubo.frame.time, 1)));
-        }
+        // ivec2 pos = ivec2(int(coord.x), int(coord.y) + 3);
+        // int index = pos.y * ubo.frame.width + pos.x;
+        // if (ubo.params.bin_buf_size > index && index >= 0) {
+        //     color = vec3(float(particle_bins[index] > ubo.params.particle_count * mod(ubo.frame.time, 1)));
+        // }
 
         // set bad_flag to 1 for debugging
         if (state.bad_flag > 0) {

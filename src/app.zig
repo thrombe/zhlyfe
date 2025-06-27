@@ -555,8 +555,8 @@ pub const ResourceManager = struct {
             state.params.particle_type_count = state.particle_type_count;
 
             state.params.bin_size = state.bin_size;
-            state.params.bin_buf_size_x = math.divide_roof(cast(i32, state.monitor_rez.width), state.params.bin_size);
-            state.params.bin_buf_size_y = math.divide_roof(cast(i32, state.monitor_rez.height), state.params.bin_size);
+            state.params.bin_buf_size_x = 15;
+            state.params.bin_buf_size_y = 10;
             state.params.bin_buf_size_z = state.bin_buf_size_z;
             state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y * state.params.bin_buf_size_z;
             // TODO: don't fuse every frame man

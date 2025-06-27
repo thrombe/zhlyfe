@@ -63,6 +63,30 @@ pub const Rng = struct {
     }
 };
 
+pub fn Vec2T(T: type) type {
+    return extern struct {
+        x: T = 0,
+        y: T = 0,
+    };
+}
+
+pub fn Vec3T(T: type) type {
+    return extern struct {
+        x: T = 0,
+        y: T = 0,
+        __: T = 0,
+    };
+}
+
+pub fn Vec4T(T: type) type {
+    return extern struct {
+        x: T = 0,
+        y: T = 0,
+        z: T = 0,
+        w: T = 0,
+    };
+}
+
 pub const Vec4 = extern struct {
     x: f32 = 0,
     y: f32 = 0,
