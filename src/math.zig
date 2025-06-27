@@ -74,6 +74,7 @@ pub fn Vec3T(T: type) type {
     return extern struct {
         x: T = 0,
         y: T = 0,
+        z: T = 0,
         __: T = 0,
     };
 }

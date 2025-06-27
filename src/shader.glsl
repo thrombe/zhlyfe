@@ -79,7 +79,7 @@ void set_seed(int id) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         int index = atomicAdd(state.particle_count, 1);
         Particle p;
-        p.pos = vec3(random(), random(), random()) * vec3(float(ubo.params.bin_buf_size_x), float(ubo.params.bin_buf_size_y), float(ubo.params.bin_buf_size_z)) * ubo.params.bin_size;
+        p.pos = vec3(random(), random(), random()) * vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
         p.vel = 50.0 * (vec3(random(), random(), random()) - 0.5) * 2.0;
         p.type_index = clamp(int(random() * ubo.params.particle_type_count), 0, ubo.params.particle_type_count - 1);
         particles[index] = p;
@@ -207,7 +207,7 @@ void set_seed(int id) {
         ivec3 bpos_min = bworld + bpos - 1;
         ivec3 bpos_max = bworld + bpos + 1;
 
-        ivec3 world = ivec3(ubo.params.bin_buf_size_x, ubo.params.bin_buf_size_y, ubo.params.bin_buf_size_z) * ubo.params.bin_size;
+        ivec3 world = ivec3(ubo.params.world_size_x, ubo.params.world_size_y, ubo.params.world_size_z);
 
         vec3 pforce = vec3(0.0);
         for (int z = -1; z <= 1; z++) {
@@ -292,7 +292,7 @@ void set_seed(int id) {
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
         vec2 pos = p.pos.xy + ubo.camera.eye.xy;
-        pos += vpos * 0.5 * particle_size * (0.5 + 0.5 * p.pos.z / (ubo.params.bin_size * ubo.params.bin_buf_size_z));
+        pos += vpos * 0.5 * particle_size * (0.5 + 0.5 * p.pos.z / ubo.params.world_size_z);
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
         pos *= zoom;

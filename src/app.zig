@@ -531,10 +531,13 @@ pub const ResourceManager = struct {
             bin_buf_size_x: i32,
             bin_buf_size_y: i32,
             bin_buf_size_z: i32,
+            world_size_x: i32,
+            world_size_y: i32,
+            world_size_z: i32,
 
-            _pad0: u32 = 0,
-            _pad1: u32 = 0,
-            _pad2: u32 = 0,
+            // _pad0: u32 = 0,
+            // _pad1: u32 = 0,
+            // _pad2: u32 = 0,
         };
 
         fn from(
@@ -554,11 +557,19 @@ pub const ResourceManager = struct {
             state.params.friction = @exp(-state.friction * state.params.delta);
             state.params.particle_type_count = state.particle_type_count;
 
+            state.requested_world_size.z = @max(state.requested_world_size.z, state.bin_size);
+            state.requested_world_size.z = @min(state.requested_world_size.z, state.bin_size * state.bin_buf_size_z_max);
+
             state.params.bin_size = state.bin_size;
-            state.params.bin_buf_size_x = 15;
-            state.params.bin_buf_size_y = 10;
-            state.params.bin_buf_size_z = state.bin_buf_size_z;
+            state.params.bin_buf_size_x = @divFloor(state.requested_world_size.x, state.bin_size);
+            state.params.bin_buf_size_y = @divFloor(state.requested_world_size.y, state.bin_size);
+            state.params.bin_buf_size_z = @divFloor(state.requested_world_size.z, state.bin_size);
             state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y * state.params.bin_buf_size_z;
+
+            state.params.world_size_x = state.params.bin_buf_size_x * state.bin_size;
+            state.params.world_size_y = state.params.bin_buf_size_y * state.bin_size;
+            state.params.world_size_z = state.params.bin_buf_size_z * state.bin_size;
+
             // TODO: don't fuse every frame man
             _ = state.cmdbuf_fuse.fuse();
 
@@ -1068,6 +1079,7 @@ pub const AppState = struct {
     bin_size: i32 = 96,
     bin_buf_size_z: i32 = 1,
     bin_buf_size_z_max: i32 = 5,
+    requested_world_size: math.Vec3T(i32) = .{ .x = 1800, .y = 1200, .z = 96 },
     params: ResourceManager.Uniforms.Params = .{
         .spawn_count = 0,
         .friction = 0,
@@ -1077,6 +1089,10 @@ pub const AppState = struct {
         .bin_buf_size_x = 0,
         .bin_buf_size_y = 0,
         .bin_buf_size_z = 0,
+
+        .world_size_x = 0,
+        .world_size_y = 0,
+        .world_size_z = 0,
     },
     camera: ShaderUtils.Camera2D = .{ .eye = .{} },
 
@@ -1285,7 +1301,7 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
-        _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.bin_buf_size_z), 1, state.bin_buf_size_z_max);
+        _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), state.bin_size, state.bin_size * state.bin_buf_size_z_max);
         reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 5.0) or reset;
 
         var sim_speed = state.ticker.speed.perc;

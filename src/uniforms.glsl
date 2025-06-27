@@ -46,9 +46,9 @@
      int bin_buf_size_x;
      int bin_buf_size_y;
      int bin_buf_size_z;
-     uint _pad0;
-     uint _pad1;
-     uint _pad2;
+     int world_size_x;
+     int world_size_y;
+     int world_size_z;
  };
 
  struct PushConstants {
