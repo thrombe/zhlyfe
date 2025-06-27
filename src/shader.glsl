@@ -238,7 +238,7 @@ void set_seed(int id) {
                             continue;
                         }
 
-                        dir /=  dist;
+                        dir /= dist;
 
                         f32 a = 45;
                         f32 b = ubo.params.bin_size / 2.0;

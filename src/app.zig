@@ -311,13 +311,9 @@ pub const ResourceManager = struct {
         errdefer allocator.free(particle_types);
         @memset(particle_types, std.mem.zeroes(ParticleType));
 
-        @memset(particle_types, ParticleType{ .color = .splat(1.0), .visual_radius = 7 });
-
         const particle_force_matrix = try allocator.alloc(ParticleForce, v.particle_type_count * v.particle_type_count);
         errdefer allocator.free(particle_force_matrix);
         @memset(particle_force_matrix, std.mem.zeroes(ParticleForce));
-
-        @memset(particle_force_matrix, ParticleForce{ .attraction_strength = 0, .attraction_radius = 50, .collision_strength = 150, .collision_radius = 10 });
 
         var particle_types_buf = try Buffer.new_from_slice(ctx, .{
             .usage = .{ .storage_buffer_bit = true },
@@ -1063,13 +1059,13 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
-    steps_per_frame: u32 = 1,
+    steps_per_frame: u32 = 2,
     max_particle_count: u32 = 400000,
     max_particle_type_count: u32 = 10,
     particle_type_count: u32 = 3,
-    spawn_count: u32 = 0,
-    friction: f32 = 0,
-    bin_size: i32 = 8 * 16,
+    spawn_count: u32 = 10000,
+    friction: f32 = 2.0,
+    bin_size: i32 = 96,
     bin_buf_size_z: i32 = 1,
     bin_buf_size_z_max: i32 = 5,
     params: ResourceManager.Uniforms.Params = .{
@@ -1091,15 +1087,28 @@ pub const AppState = struct {
     // }
 
     pub fn init(window: *engine_mod.Window, app: *App) !@This() {
-        _ = app;
         const mouse = window.poll_mouse();
         const sze = try window.get_res();
+
+        var rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+        const zrng = math.Rng.init(rng.random()).with2(.{ .min = 0.1, .max = 1.0 });
+
+        for (app.resources.particle_types) |*pt| {
+            const color = Vec3.random(&zrng);
+            pt.* = .{ .color = color.normalize().withw(1.0), .visual_radius = 5 };
+        }
+
+        const frng = math.Rng.init(rng.random()).with2(.{ .min = -5, .max = 20 });
+        for (app.resources.particle_force_matrix) |*pf| {
+            pf.* = std.mem.zeroes(@TypeOf(pf.*));
+            pf.attraction_strength = frng.next();
+        }
 
         return .{
             .ticker = try .init(),
             .monitor_rez = .{ .width = sze.width, .height = sze.height },
             .mouse = .{ .x = mouse.x, .y = mouse.y, .left = mouse.left },
-            .rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp())),
+            .rng = rng,
             .arena = std.heap.ArenaAllocator.init(allocator.*),
         };
     }
