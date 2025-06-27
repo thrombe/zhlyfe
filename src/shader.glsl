@@ -66,10 +66,6 @@ void set_seed(int id) {
     seed = int(ubo.frame.frame) ^ id ^ floatBitsToInt(ubo.frame.time);
 }
 
-ivec3 get_bin_pos(vec3 pos) {
-    return clamp(ivec3(pos / ubo.params.bin_size), ivec3(0, 0, 0), ivec3(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1, ubo.params.bin_buf_size_z - 1));
-}
-
 #ifdef SPAWN_PARTICLES_PASS
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
@@ -133,7 +129,7 @@ ivec3 get_bin_pos(vec3 pos) {
 
         Particle p = particles[id];
 
-        ivec3 pos = get_bin_pos(p.pos);
+        ivec3 pos = ivec3(p.pos / ubo.params.bin_size);
         int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int _count = atomicAdd(particle_bins_back[index], 1);
@@ -177,7 +173,7 @@ ivec3 get_bin_pos(vec3 pos) {
 
         Particle p = particles[id];
 
-        ivec3 pos = get_bin_pos(p.pos);
+        ivec3 pos = ivec3(p.pos / ubo.params.bin_size);
         int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int bin_index = atomicAdd(particle_bins[index], -1);
@@ -206,7 +202,7 @@ ivec3 get_bin_pos(vec3 pos) {
         Particle p = particles_back[id];
         // ParticleType pt = particle_types[p.type_index];
 
-        ivec3 bpos = get_bin_pos(p.pos);
+        ivec3 bpos = ivec3(p.pos / ubo.params.bin_size);
         ivec3 bworld = ivec3(ubo.params.bin_buf_size_x, ubo.params.bin_buf_size_y, ubo.params.bin_buf_size_z);
         ivec3 bpos_min = bworld + bpos - 1;
         ivec3 bpos_max = bworld + bpos + 1;
@@ -214,10 +210,10 @@ ivec3 get_bin_pos(vec3 pos) {
         ivec3 world = ivec3(ubo.frame.monitor_width, ubo.frame.monitor_height, ubo.params.bin_buf_size_z * ubo.params.bin_size);
 
         vec3 pforce = vec3(0.0);
-        for (int z = bpos_min.z; z <= bpos_max.z; z++) {
-            for (int y = bpos_min.y; y <= bpos_max.y; y++) {
-                for (int x = bpos_min.x; x <= bpos_max.x; x++) {
-                    ivec3 bpos = ivec3(x, y, z) % bworld;
+        for (int z = -1; z <= 1; z++) {
+            for (int y = -1; y <= 1; y++) {
+                for (int x = -1; x <= 1; x++) {
+                    ivec3 bpos = (ivec3(x, y, z) + bpos + bworld) % bworld;
                     int index = bpos.z * bworld.y * bworld.x + bpos.y * bworld.x + bpos.x;
                     int offset_start = particle_bins[index];
                     int offset_end = particle_bins[index + 1];
@@ -235,7 +231,7 @@ ivec3 get_bin_pos(vec3 pos) {
                         // Calculate wrapped distance
                         vec3 dir = o.pos - p.pos;
                         // dir = mix(dir + world, mix(dir - world, dir, lessThan(dir, world / 2.0)), greaterThan(dir, - world / 2.0));
-                        dir = mix(dir, dir - world * sign(dir), greaterThan(abs(dir), world / 2.0));
+                        dir -= world * sign(dir) * vec3(greaterThanEqual(abs(dir), world * 0.5));
 
                         f32 dist = length(dir);
                         if (dist <= 0.0) {
@@ -268,24 +264,12 @@ ivec3 get_bin_pos(vec3 pos) {
         p.vel += pforce * ubo.params.delta;
         p.pos += p.vel * ubo.params.delta;
 
-        if (p.pos.x < 0) {
-            p.pos.x = ubo.frame.monitor_width;
-        }
-        if (p.pos.y < 0) {
-            p.pos.y = ubo.frame.monitor_height;
-        }
-        if (p.pos.z < 0) {
-            p.pos.z = ubo.params.bin_buf_size_z * ubo.params.bin_size;
-        }
-        if (p.pos.x > ubo.frame.monitor_width) {
-            p.pos.x = 0;
-        }
-        if (p.pos.y > ubo.frame.monitor_height) {
-            p.pos.y = 0;
-        }
-        if (p.pos.z > ubo.params.bin_buf_size_z * ubo.params.bin_size) {
-            p.pos.z = 0;
-        }
+        // position wrapping
+        p.pos += world * vec3(lessThan(p.pos, vec3(0)));
+        p.pos -= world * vec3(greaterThanEqual(p.pos, world));
+
+        // prevents position blow up
+        p.pos = clamp(p.pos, vec3(0.0), world);
 
         particles[id] = p;
     }
