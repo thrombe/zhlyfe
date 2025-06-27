@@ -207,14 +207,18 @@ ivec3 get_bin_pos(vec3 pos) {
         // ParticleType pt = particle_types[p.type_index];
 
         ivec3 bpos = get_bin_pos(p.pos);
-        ivec3 bpos_min = max(bpos - 1, ivec3(0));
-        ivec3 bpos_max = min(bpos + 1, ivec3(ubo.params.bin_buf_size_x - 1, ubo.params.bin_buf_size_y - 1, ubo.params.bin_buf_size_z - 1));
+        ivec3 bworld = ivec3(ubo.params.bin_buf_size_x, ubo.params.bin_buf_size_y, ubo.params.bin_buf_size_z);
+        ivec3 bpos_min = bworld + bpos - 1;
+        ivec3 bpos_max = bworld + bpos + 1;
+
+        ivec3 world = ivec3(ubo.frame.monitor_width, ubo.frame.monitor_height, ubo.params.bin_buf_size_z * ubo.params.bin_size);
 
         vec3 pforce = vec3(0.0);
         for (int z = bpos_min.z; z <= bpos_max.z; z++) {
             for (int y = bpos_min.y; y <= bpos_max.y; y++) {
                 for (int x = bpos_min.x; x <= bpos_max.x; x++) {
-                    int index = z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + y * ubo.params.bin_buf_size_x + x;
+                    ivec3 bpos = ivec3(x, y, z) % bworld;
+                    int index = bpos.z * bworld.y * bworld.x + bpos.y * bworld.x + bpos.x;
                     int offset_start = particle_bins[index];
                     int offset_end = particle_bins[index + 1];
 
@@ -227,15 +231,22 @@ ivec3 get_bin_pos(vec3 pos) {
                         // ParticleType ot = particle_types[o.type_index];
 
                         ParticleForce forces = particle_force_matrix[p.type_index * ubo.params.particle_type_count + o.type_index];
-                        f32 dist = length(o.pos - p.pos);
 
+                        // Calculate wrapped distance
+                        vec3 dir = o.pos - p.pos;
+                        // dir = mix(dir + world, mix(dir - world, dir, lessThan(dir, world / 2.0)), greaterThan(dir, - world / 2.0));
+                        dir = mix(dir, dir - world * sign(dir), greaterThan(abs(dir), world / 2.0));
+
+                        f32 dist = length(dir);
                         if (dist <= 0.0) {
                             continue;
                         }
+
+                        dir /=  dist;
+
                         f32 a = 45;
                         f32 b = ubo.params.bin_size / 2.0;
                         f32 c = ubo.params.bin_size;
-                        vec3 dir = (o.pos - p.pos) / dist;
                         if (dist < a) {
                             pforce -= 140 * (1.0 - dist / a) * dir;
                         } else if (dist < b) {
@@ -258,10 +269,10 @@ ivec3 get_bin_pos(vec3 pos) {
         p.pos += p.vel * ubo.params.delta;
 
         if (p.pos.x < 0) {
-            p.pos.x = float(ubo.frame.monitor_width);
+            p.pos.x = ubo.frame.monitor_width;
         }
         if (p.pos.y < 0) {
-            p.pos.y = float(ubo.frame.monitor_height);
+            p.pos.y = ubo.frame.monitor_height;
         }
         if (p.pos.z < 0) {
             p.pos.z = ubo.params.bin_buf_size_z * ubo.params.bin_size;
