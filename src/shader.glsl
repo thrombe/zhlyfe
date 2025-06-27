@@ -90,7 +90,7 @@ void set_seed(int id) {
 
         memoryBarrierBuffer();
 
-        int count = atomicAdd(state.particle_count, 0);
+        int count = int(ubo.params.particle_count);
         draw_call.index_count = count * 6;
         draw_call.instance_count = 1;
         draw_call.first_index = 0;
