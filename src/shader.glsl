@@ -204,8 +204,6 @@ void set_seed(int id) {
 
         ivec3 bpos = ivec3(p.pos / ubo.params.bin_size);
         ivec3 bworld = ivec3(ubo.params.bin_buf_size_x, ubo.params.bin_buf_size_y, ubo.params.bin_buf_size_z);
-        ivec3 bpos_min = bworld + bpos - 1;
-        ivec3 bpos_max = bworld + bpos + 1;
 
         ivec3 world = ivec3(ubo.params.world_size_x, ubo.params.world_size_y, ubo.params.world_size_z);
 
@@ -230,7 +228,6 @@ void set_seed(int id) {
 
                         // Calculate wrapped distance
                         vec3 dir = o.pos - p.pos;
-                        // dir = mix(dir + world, mix(dir - world, dir, lessThan(dir, world / 2.0)), greaterThan(dir, - world / 2.0));
                         dir -= world * sign(dir) * vec3(greaterThanEqual(abs(dir), world * 0.5));
 
                         f32 dist = length(dir);
@@ -292,7 +289,7 @@ void set_seed(int id) {
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
         vec2 pos = p.pos.xy + ubo.camera.eye.xy;
-        pos += vpos * 0.5 * particle_size * (0.5 + 0.5 * p.pos.z / ubo.params.world_size_z);
+        pos += vpos * 0.5 * particle_size * clamp(0.5 + 0.5 * p.pos.z / max(ubo.params.world_size_z, 1), 0, 1);
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
         pos *= zoom;

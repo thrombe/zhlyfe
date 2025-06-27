@@ -557,18 +557,22 @@ pub const ResourceManager = struct {
             state.params.friction = @exp(-state.friction * state.params.delta);
             state.params.particle_type_count = state.particle_type_count;
 
-            state.requested_world_size.z = @max(state.requested_world_size.z, state.bin_size);
+            // cap requested world size's z coord.
             state.requested_world_size.z = @min(state.requested_world_size.z, state.bin_size * state.bin_buf_size_z_max);
 
             state.params.bin_size = state.bin_size;
             state.params.bin_buf_size_x = @divFloor(state.requested_world_size.x, state.bin_size);
             state.params.bin_buf_size_y = @divFloor(state.requested_world_size.y, state.bin_size);
             state.params.bin_buf_size_z = @divFloor(state.requested_world_size.z, state.bin_size);
-            state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y * state.params.bin_buf_size_z;
 
+            // allow z to be 0
             state.params.world_size_x = state.params.bin_buf_size_x * state.bin_size;
             state.params.world_size_y = state.params.bin_buf_size_y * state.bin_size;
             state.params.world_size_z = state.params.bin_buf_size_z * state.bin_size;
+
+            // bin_buf_size_. > 0
+            state.params.bin_buf_size_z = @max(state.params.bin_buf_size_z, 1);
+            state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y * state.params.bin_buf_size_z;
 
             // TODO: don't fuse every frame man
             _ = state.cmdbuf_fuse.fuse();
@@ -1301,7 +1305,7 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
-        _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), state.bin_size, state.bin_size * state.bin_buf_size_z_max);
+        _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), 0, state.bin_size * state.bin_buf_size_z_max);
         reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 5.0) or reset;
 
         var sim_speed = state.ticker.speed.perc;
