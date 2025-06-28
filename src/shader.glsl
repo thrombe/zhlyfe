@@ -213,7 +213,8 @@ void set_seed(int id) {
 
         ivec3 world = ivec3(ubo.params.world_size_x, ubo.params.world_size_y, ubo.params.world_size_z);
 
-        vec3 pforce = vec3(0.0);
+        vec3 fattract = vec3(0.0);
+        vec3 fcollide = vec3(0.0);
         for (int z = -1; z <= 1; z++) {
             for (int y = -1; y <= 1; y++) {
                 for (int x = -1; x <= 1; x++) {
@@ -250,11 +251,11 @@ void set_seed(int id) {
                         f32 attraction_peak_r = mix(forces.collision_radius, forces.attraction_radius, forces.attraction_peak_dist_factor) * bin_size;
                         f32 attraction_s = forces.attraction_strength * ubo.params.attraction_strength_scale;
                         if (dist < collision_r) {
-                            pforce -= collision_s * (1.0 - dist / collision_r) * dir;
+                            fcollide -= collision_s * (1.0 - dist / collision_r) * dir;
                         } else if (dist < attraction_peak_r) {
-                            pforce += attraction_s * ((dist - collision_r) / (attraction_peak_r - collision_r)) * dir;
+                            fattract += attraction_s * ((dist - collision_r) / (attraction_peak_r - collision_r)) * dir;
                         } else if (dist < attraction_r) {
-                            pforce += attraction_s * (1.0 - (dist - attraction_peak_r) / (attraction_r - attraction_peak_r)) * dir;
+                            fattract += attraction_s * (1.0 - (dist - attraction_peak_r) / (attraction_r - attraction_peak_r)) * dir;
                         }
                         // if (dist > 0.0) {
                         //     vec2 dir = (o.pos - p.pos) / dist;
@@ -266,6 +267,13 @@ void set_seed(int id) {
             }
         }
 
+        f32 flen = length(fattract);
+        // pforce *= flen / (flen + 1);
+        // fattract *= 1.0/log(flen + 1);
+        // fattract *= pow(flen, 0.83) / max(flen, 1);
+        fattract *= min(flen, 45.0 * ubo.params.attraction_strength_scale)/max(flen, 1);
+
+        vec3 pforce = fcollide + fattract;
         p.vel *= ubo.params.friction;
         p.vel += pforce * ubo.params.delta;
         p.pos += p.vel * ubo.params.delta;
