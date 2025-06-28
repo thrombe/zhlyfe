@@ -62,9 +62,12 @@ layout(set = 0, binding = _bind_particle_bins) bufffer ParticleBinBuffer {
 layout(set = 0, binding = _bind_particles_draw_call) bufffer ParticlesDrawCallBuffer {
     DrawCall draw_call;
 };
+layout(push_constant) uniform PushConstantsUniform {
+    PushConstants push;
+};
 
 void set_seed(int id) {
-    seed = int(ubo.frame.frame) ^ id ^ floatBitsToInt(ubo.frame.time);
+    seed = int(ubo.frame.frame) ^ id ^ floatBitsToInt(ubo.frame.time) ^ push.seed;
 }
 
 #ifdef SPAWN_PARTICLES_PASS
@@ -134,10 +137,6 @@ void set_seed(int id) {
 #endif // PARTICLE_COUNT_PASS
 
 #ifdef BIN_PREFIX_SUM_PASS
-    layout(push_constant) uniform PushConstantsUniform {
-        PushConstants push;
-    };
-
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
@@ -160,14 +159,10 @@ void set_seed(int id) {
 #endif // BIN_PREFIX_SUM_PASS
 
 #ifdef PARTICLE_BINNING_PASS
-    layout(push_constant) uniform PushConstantsUniform {
-        PushRandSeed push;
-    };
-
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
-        set_seed(id ^ push.seed);
+        set_seed(id);
 
         if (id >= state.particle_count) {
             return;

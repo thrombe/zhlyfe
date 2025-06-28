@@ -506,20 +506,13 @@ pub const ResourceManager = struct {
     };
     pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
-    pub const PushRandSeed = extern struct {
+    pub const PushConstants = extern struct {
+        reduce_step: i32 = 0,
         seed: i32,
 
         _pad0: u32 = 0,
         _pad1: u32 = 0,
-        _pad2: u32 = 0,
-    };
-
-    pub const PushConstants = extern struct {
-        reduce_step: i32,
-
-        _pad0: u32 = 0,
-        _pad1: u32 = 0,
-        _pad2: u32 = 0,
+        // _pad2: u32 = 0,
     };
 
     pub const Uniforms = extern struct {
@@ -684,7 +677,6 @@ pub const RendererState = struct {
         try gen.add_struct("ParticleForce", ResourceManager.ParticleForce);
         try gen.add_struct("Particle", ResourceManager.Particle);
         try gen.add_struct("Params", ResourceManager.Uniforms.Params);
-        try gen.add_struct("PushRandSeed", ResourceManager.PushRandSeed);
         try gen.add_struct("PushConstants", ResourceManager.PushConstants);
         try gen.add_struct("Uniforms", ResourceManager.Uniforms);
         try gen.add_enum("_bind", ResourceManager.UniformBinds);
@@ -875,6 +867,11 @@ pub const RendererState = struct {
         self.pipelines.spawn_particles = try ComputePipeline.new(device, .{
             .shader = self.stages.shaders.map.get("spawn_particles").?.code,
             .desc_set_layouts = &.{desc_set.layout},
+            .push_constant_ranges = &[_]vk.PushConstantRange{.{
+                .stage_flags = .{ .compute_bit = true },
+                .offset = 0,
+                .size = @sizeOf(ResourceManager.PushConstants),
+            }},
         });
 
         if (initialized) {
@@ -915,7 +912,7 @@ pub const RendererState = struct {
             .push_constant_ranges = &[_]vk.PushConstantRange{.{
                 .stage_flags = .{ .compute_bit = true },
                 .offset = 0,
-                .size = @sizeOf(ResourceManager.PushRandSeed),
+                .size = @sizeOf(ResourceManager.PushConstants),
             }},
         });
 
@@ -925,6 +922,11 @@ pub const RendererState = struct {
         self.pipelines.tick_particles = try ComputePipeline.new(device, .{
             .shader = self.stages.shaders.map.get("tick_particles").?.code,
             .desc_set_layouts = &.{desc_set.layout},
+            .push_constant_ranges = &[_]vk.PushConstantRange{.{
+                .stage_flags = .{ .compute_bit = true },
+                .offset = 0,
+                .size = @sizeOf(ResourceManager.PushConstants),
+            }},
         });
 
         if (initialized) {
@@ -957,6 +959,13 @@ pub const RendererState = struct {
             .pipeline = self.pipelines.spawn_particles,
             .desc_set = self.descriptor_set.set,
         });
+
+        // TODO: oof. don't use arena allocator. somehow retain this memory somewhere.
+        {
+            const constants = try alloc.create(ResourceManager.PushConstants);
+            constants.* = .{ .seed = app_state.rng.random().int(i32) };
+            cmdbuf.push_constants(device, self.pipelines.spawn_particles.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
+        }
         cmdbuf.dispatch(device, .{ .x = 1 });
         cmdbuf.memBarrier(device, .{});
 
@@ -985,10 +994,11 @@ pub const RendererState = struct {
                     .desc_set = self.descriptor_set.set,
                 });
 
-                // TODO: oof. don't use arena allocator. somehow retain this memory somewhere.
-                const constants = try alloc.create(ResourceManager.PushConstants);
-                constants.* = .{ .reduce_step = reduce_step };
-                cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
+                {
+                    const constants = try alloc.create(ResourceManager.PushConstants);
+                    constants.* = .{ .reduce_step = reduce_step, .seed = app_state.rng.random().int(i32) };
+                    cmdbuf.push_constants(device, self.pipelines.bin_prefix_sum.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
+                }
 
                 // 1 larger then the buffer to store capacities
                 cmdbuf.dispatch(device, .{ .x = math.divide_roof(cast(u32, app_state.params.bin_buf_size + 1), 64) });
@@ -1002,14 +1012,16 @@ pub const RendererState = struct {
                 std.mem.swap(DescriptorSet, &self.descriptor_set, &self.descriptor_set_back);
             }
 
-            const seed = try alloc.create(ResourceManager.PushRandSeed);
-            seed.seed = @bitCast(cast(u32, @rem(app_state.rng.next(), std.math.maxInt(u32))));
             // bin particles
             cmdbuf.bindCompute(device, .{
                 .pipeline = self.pipelines.particle_binning,
                 .desc_set = self.descriptor_set.set,
             });
-            cmdbuf.push_constants(device, self.pipelines.particle_binning.layout, std.mem.asBytes(seed), .{ .compute_bit = true });
+            {
+                const constants = try alloc.create(ResourceManager.PushConstants);
+                constants.* = .{ .seed = app_state.rng.random().int(i32) };
+                cmdbuf.push_constants(device, self.pipelines.particle_binning.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
+            }
             cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
             cmdbuf.memBarrier(device, .{});
 
@@ -1018,6 +1030,11 @@ pub const RendererState = struct {
                 .pipeline = self.pipelines.tick_particles,
                 .desc_set = self.descriptor_set.set,
             });
+            {
+                const constants = try alloc.create(ResourceManager.PushConstants);
+                constants.* = .{ .seed = app_state.rng.random().int(i32) };
+                cmdbuf.push_constants(device, self.pipelines.tick_particles.layout, std.mem.asBytes(constants), .{ .compute_bit = true });
+            }
             cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
             cmdbuf.memBarrier(device, .{});
         }
