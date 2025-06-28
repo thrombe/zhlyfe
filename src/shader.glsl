@@ -329,7 +329,7 @@ void set_seed(int id) {
         f32 z_shrink = (1.0 - ubo.params.particle_z_shrinking_factor) + z_factor * ubo.params.particle_z_shrinking_factor;
         z_shrink = clamp(z_shrink, 0, 1);
 
-        vec2 pos = p.pos.xy + ubo.camera.eye.xy;
+        vec2 pos = p.pos.xy + ubo.camera.eye.xy - vec2(float(ubo.params.world_size_x), float(ubo.params.world_size_y)) * 0.5;
         pos += vpos * 0.5 * particle_size * z_shrink;
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
