@@ -1168,10 +1168,10 @@ pub const AppState = struct {
     fn randomize_particle_forces(self: *@This(), app: *App) void {
         const zrng = .{
             .collision_strength = math.Rng.init(self.rng.random()).with2(.{ .min = 0.7, .max = 1 }),
-            .collision_radius = math.Rng.init(self.rng.random()).with2(.{ .min = 0.1, .max = 0.35 }),
-            .attraction_strength = math.Rng.init(self.rng.random()).with2(.{ .min = 0.3, .max = 1, .flip_sign = true }),
-            .attraction_radius = math.Rng.init(self.rng.random()).with2(.{ .min = 0.35, .max = 1 }),
-            .attraction_peak_dist_factor = math.Rng.init(self.rng.random()).with2(.{ .min = 0.35, .max = 0.1 }),
+            .collision_radius = math.Rng.init(self.rng.random()).with2(.{ .min = 0.3, .max = 0.4 }),
+            .attraction_strength = math.Rng.init(self.rng.random()).with2(.{ .min = -0.3, .max = 1.0 }),
+            .attraction_radius = math.Rng.init(self.rng.random()).with2(.{ .min = 0.7, .max = 1 }),
+            .attraction_peak_dist_factor = math.Rng.init(self.rng.random()).with2(.{ .min = 0.6, .max = 0.7 }),
         };
         for (app.resources.particle_force_matrix) |*pf| {
             pf.* = std.mem.zeroes(@TypeOf(pf.*));

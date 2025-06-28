@@ -246,8 +246,8 @@ void set_seed(int id) {
                         f32 bin_size = ubo.params.bin_size;
                         f32 collision_r = forces.collision_radius * bin_size;
                         f32 collision_s = forces.collision_strength * ubo.params.collision_strength_scale;
-                        f32 attraction_peak_r = forces.attraction_radius * forces.attraction_peak_dist_factor * bin_size;
-                        f32 attraction_r = forces.attraction_radius * (1.0 - forces.attraction_peak_dist_factor) * bin_size;
+                        f32 attraction_r = forces.attraction_radius * bin_size;
+                        f32 attraction_peak_r = mix(forces.collision_radius, forces.attraction_radius, forces.attraction_peak_dist_factor) * bin_size;
                         f32 attraction_s = forces.attraction_strength * ubo.params.attraction_strength_scale;
                         if (dist < collision_r) {
                             pforce -= collision_s * (1.0 - dist / collision_r) * dir;
