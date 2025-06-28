@@ -5,6 +5,7 @@
 
 struct GpuState {
     int particle_count;
+    int seed_id;
 
     int bad_flag;
 
@@ -70,7 +71,7 @@ void set_seed(int id) {
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
-        set_seed(id);
+        set_seed(id ^ atomicAdd(state.seed_id, 1));
 
         if (id == 0) {
             int count = int(state.particle_count);
@@ -162,21 +163,36 @@ void set_seed(int id) {
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
-        set_seed(id);
+        set_seed(id ^ atomicAdd(state.seed_id, 1));
 
         if (id >= state.particle_count) {
             return;
         }
+        vec3 world = vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
 
         Particle p = particles[id];
 
-        if (ubo.params.randomize_particle_types != 0) {
-            p.type_index = randuint() % ubo.params.particle_type_count;
+        f32 vel = length(p.vel);
+        f32 dist = 2.0 * length(p.pos - world / 2.0) / length(world);
+        f32 particle_entropy = 0.0;
+        particle_entropy += float(vel < 10.0) * 0.001 + float(vel > 20.0) * 0.001;
+        particle_entropy += pow(p.exposure, 1.0/3.0) * 0.0001;
+        particle_entropy += float(p.age > 1000.0) * 0.0006;
+        particle_entropy *= ubo.params.entropy;
+
+        bool killed = false;
+        if (particle_entropy > random()) {
+            killed = true;
         }
-        if (ubo.params.randomize_particle_attrs != 0) {
-            vec3 world = vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
+
+        if (ubo.params.randomize_particle_types != 0 || killed) {
+            p.type_index = randuint() % ubo.params.particle_type_count;
+            p.age = 0.0;
+            p.exposure = 0.0;
+        }
+        if (ubo.params.randomize_particle_attrs != 0 || killed) {
             p.pos = vec3(random(), random(), random()) * world;
-            p.vel = (vec3(random(), random(), random()) - 0.5) * 2000;
+            p.vel = (vec3(random(), random(), random()) - 0.5) * mix(2000, 2, killed);
         }
 
         ivec3 pos = ivec3(p.pos / ubo.params.bin_size);
@@ -192,7 +208,7 @@ void set_seed(int id) {
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
-        set_seed(id);
+        set_seed(id ^ atomicAdd(state.seed_id, 1));
 
         if (id >= state.particle_count) {
             return;
@@ -215,6 +231,7 @@ void set_seed(int id) {
 
         vec3 fattract = vec3(0.0);
         vec3 fcollide = vec3(0.0);
+        f32 exposure = 0.0;
         for (int z = -1; z <= 1; z++) {
             for (int y = -1; y <= 1; y++) {
                 for (int x = -1; x <= 1; x++) {
@@ -242,6 +259,8 @@ void set_seed(int id) {
                             continue;
                         }
 
+                        exposure += 1.0;
+
                         dir /= dist;
 
                         f32 bin_size = ubo.params.bin_size;
@@ -256,12 +275,9 @@ void set_seed(int id) {
                             fattract += attraction_s * ((dist - collision_r) / (attraction_peak_r - collision_r)) * dir;
                         } else if (dist < attraction_r) {
                             fattract += attraction_s * (1.0 - (dist - attraction_peak_r) / (attraction_r - attraction_peak_r)) * dir;
+                        } else {
+                            exposure -= 1.0;
                         }
-                        // if (dist > 0.0) {
-                        //     vec2 dir = (o.pos - p.pos) / dist;
-                        //     pforce += forces.attraction_strength * max(0.0, 1.0 - dist / forces.attraction_radius) * dir;
-                        //     pforce -= forces.collision_strength * max(0.0, 1.0 - dist / forces.collision_radius) * dir;
-                        // }
                     }
                 }
             }
@@ -284,6 +300,9 @@ void set_seed(int id) {
 
         // prevents position blow up
         p.pos = clamp(p.pos, vec3(0.0), world);
+
+        p.age += 1.0;
+        p.exposure = exposure;
 
         particles[id] = p;
     }

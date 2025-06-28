@@ -31,9 +31,9 @@
      vec3 pos;
      vec3 vel;
      uint type_index;
-     uint _pad0;
-     uint _pad1;
-     uint _pad2;
+     float age;
+     float exposure;
+     float activeness;
  };
 
  struct Params {
@@ -44,6 +44,7 @@
      float particle_z_shrinking_factor;
      float particle_z_blur_factor;
      float friction;
+     float entropy;
      float collision_strength_scale;
      float attraction_strength_scale;
      float max_attraction_factor;
@@ -60,7 +61,6 @@
      int world_size_x;
      int world_size_y;
      int world_size_z;
-     uint _pad0;
  };
 
  struct PushConstants {

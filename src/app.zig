@@ -497,10 +497,12 @@ pub const ResourceManager = struct {
         pos: math.Vec3,
         vel: math.Vec3,
         type_index: u32,
+        age: f32,
+        exposure: f32,
 
         _pad0: u32 = 0,
-        _pad1: u32 = 0,
-        _pad2: u32 = 0,
+        // _pad1: u32 = 0,
+        // _pad2: u32 = 0,
     };
     pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
@@ -526,6 +528,7 @@ pub const ResourceManager = struct {
             particle_z_shrinking_factor: f32 = 0.7,
             particle_z_blur_factor: f32 = 0.27,
             friction: f32,
+            entropy: f32 = 0.3,
             collision_strength_scale: f32 = 96,
             attraction_strength_scale: f32 = 27,
             max_attraction_factor: f32 = 27,
@@ -543,7 +546,7 @@ pub const ResourceManager = struct {
             world_size_y: i32,
             world_size_z: i32,
 
-            _pad0: u32 = 0,
+            // _pad0: u32 = 0,
             // _pad1: u32 = 0,
             // _pad2: u32 = 0,
         };
@@ -1376,6 +1379,7 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
         _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), 0, state.bin_size * state.bin_buf_size_z_max);
         reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 5.0) or reset;
+        _ = c.ImGui_SliderFloat("entropy", @ptrCast(&state.params.entropy), 0.0, 1.0);
         _ = c.ImGui_SliderFloat("collision_strength_scale", @ptrCast(&state.params.collision_strength_scale), 0, 200);
         _ = c.ImGui_SliderFloat("attraction_strength_scale", @ptrCast(&state.params.attraction_strength_scale), 0, 200);
         _ = c.ImGui_SliderFloat("max_attraction_factor", @ptrCast(&state.params.max_attraction_factor), 1, 200);
