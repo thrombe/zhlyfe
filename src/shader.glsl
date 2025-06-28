@@ -72,6 +72,15 @@ void set_seed(int id) {
         int id = global_id;
         set_seed(id);
 
+        if (id == 0) {
+            int count = int(state.particle_count);
+            draw_call.index_count = count * 6;
+            draw_call.instance_count = 1;
+            draw_call.first_index = 0;
+            draw_call.vertex_offset = 0;
+            draw_call.first_instance = 0;
+        }
+
         if (id >= ubo.params.spawn_count) {
             return;
         }
@@ -83,19 +92,6 @@ void set_seed(int id) {
         p.vel = 50.0 * (vec3(random(), random(), random()) - 0.5) * 2.0;
         p.type_index = clamp(int(random() * ubo.params.particle_type_count), 0, ubo.params.particle_type_count - 1);
         particles[index] = p;
-
-        if (id > 0) {
-            return;
-        }
-
-        memoryBarrierBuffer();
-
-        int count = int(ubo.params.particle_count);
-        draw_call.index_count = count * 6;
-        draw_call.instance_count = 1;
-        draw_call.first_index = 0;
-        draw_call.vertex_offset = 0;
-        draw_call.first_instance = 0;
     }
 #endif // SPAWN_PARTICLES_PASS
 

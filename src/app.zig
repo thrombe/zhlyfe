@@ -570,6 +570,16 @@ pub const ResourceManager = struct {
             state.params.world_size_y = state.params.bin_buf_size_y * state.bin_size;
             state.params.world_size_z = state.params.bin_buf_size_z * state.bin_size;
 
+            if (state.params.world_size_x == 0) {
+                state.params.world_size_x = state.requested_world_size.x;
+            }
+            if (state.params.world_size_y == 0) {
+                state.params.world_size_y = state.requested_world_size.y;
+            }
+            if (state.params.world_size_z == 0) {
+                state.params.world_size_z = state.requested_world_size.z;
+            }
+
             // bin_buf_size_. > 0
             state.params.bin_buf_size_z = @max(state.params.bin_buf_size_z, 1);
             state.params.bin_buf_size = state.params.bin_buf_size_x * state.params.bin_buf_size_y * state.params.bin_buf_size_z;
@@ -915,15 +925,15 @@ pub const RendererState = struct {
 
         try cmdbuf.begin(device);
 
-        for (0..app_state.steps_per_frame) |_| {
-            // spawn particles
-            cmdbuf.bindCompute(device, .{
-                .pipeline = self.pipelines.spawn_particles,
-                .desc_set = self.descriptor_set.set,
-            });
-            cmdbuf.dispatch(device, .{ .x = 1 });
-            cmdbuf.memBarrier(device, .{});
+        // spawn particles
+        cmdbuf.bindCompute(device, .{
+            .pipeline = self.pipelines.spawn_particles,
+            .desc_set = self.descriptor_set.set,
+        });
+        cmdbuf.dispatch(device, .{ .x = 1 });
+        cmdbuf.memBarrier(device, .{});
 
+        for (0..app_state.steps_per_frame) |_| {
             // bin reset
             cmdbuf.bindCompute(device, .{
                 .pipeline = self.pipelines.bin_reset,
