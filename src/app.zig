@@ -1353,6 +1353,7 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderInt("particle visual size", @ptrCast(&state.params.particle_visual_size), 1, 100);
         _ = c.ImGui_SliderFloat("particle_z_shrinking_factor", @ptrCast(&state.params.particle_z_shrinking_factor), 0, 1);
         _ = c.ImGui_SliderFloat("particle_z_blur_factor", @ptrCast(&state.params.particle_z_blur_factor), 0, 2);
+        _ = c.ImGui_SliderInt("particles type count", @ptrCast(&state.particle_type_count), 1, cast(i32, state.max_particle_type_count));
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
         _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), 0, state.bin_size * state.bin_buf_size_z_max);
