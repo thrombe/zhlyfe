@@ -476,7 +476,7 @@ pub const ResourceManager = struct {
     };
     pub const ParticleType = extern struct {
         color: Vec4,
-        visual_radius: f32,
+        particle_scale: f32,
 
         _pad0: u32 = 0,
         _pad1: u32 = 0,
@@ -519,7 +519,7 @@ pub const ResourceManager = struct {
 
         const Params = extern struct {
             delta: f32 = 0,
-            particle_size: u32 = 16,
+            particle_visual_size: u32 = 16,
             grid_size: u32 = 32,
             zoom: f32 = 1.0,
             particle_z_shrinking_factor: f32 = 0.7,
@@ -1157,7 +1157,7 @@ pub const AppState = struct {
 
         for (app.resources.particle_types) |*pt| {
             const color = Vec3.random(&zrng);
-            pt.* = .{ .color = color.normalize().withw(1.0), .visual_radius = 5 };
+            pt.* = .{ .color = color.normalize().withw(1.0), .particle_scale = 0.5 };
         }
 
         const frng = math.Rng.init(self.rng.random()).with2(.{ .min = -5, .max = 20 });
@@ -1326,7 +1326,7 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderInt("FPS cap", @ptrCast(&state.fps_cap), 5, 500);
         reset = c.ImGui_SliderInt("spawn count", @ptrCast(&state.spawn_count), 0, 10000) or reset;
         _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0.001, 2.0);
-        _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
+        _ = c.ImGui_SliderInt("particle visual size", @ptrCast(&state.params.particle_visual_size), 1, 100);
         _ = c.ImGui_SliderFloat("particle_z_shrinking_factor", @ptrCast(&state.params.particle_z_shrinking_factor), 0, 1);
         _ = c.ImGui_SliderFloat("particle_z_blur_factor", @ptrCast(&state.params.particle_z_blur_factor), 0, 2);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
@@ -1388,7 +1388,7 @@ pub const GuiState = struct {
 
     fn editParticleType(_: *@This(), e: *ResourceManager.ParticleType) void {
         _ = c.ImGui_ColorEdit4("color", e.color.as_buf().ptr, c.ImGuiColorEditFlags_AlphaBar | c.ImGuiColorEditFlags_Float);
-        _ = c.ImGui_SliderFloat("visual_radius", &e.visual_radius, 0, 100);
+        _ = c.ImGui_SliderFloat("particle scale", &e.particle_scale, 0, 1);
     }
 
     fn editParticleForce(_: *@This(), e: *ResourceManager.ParticleForce) void {

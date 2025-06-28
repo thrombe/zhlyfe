@@ -289,7 +289,7 @@ void set_seed(int id) {
         vec2 vpos = quad_verts[vert_index].xy;
 
         float zoom = ubo.params.zoom;
-        float particle_size = t.visual_radius;
+        float particle_size = t.particle_scale * ubo.params.particle_visual_size;
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 

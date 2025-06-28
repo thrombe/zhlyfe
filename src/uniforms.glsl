@@ -10,7 +10,7 @@
 
  struct ParticleType {
      vec4 color;
-     float visual_radius;
+     float particle_scale;
      uint _pad0;
      uint _pad1;
      uint _pad2;
@@ -34,7 +34,7 @@
 
  struct Params {
      float delta;
-     uint particle_size;
+     uint particle_visual_size;
      uint grid_size;
      float zoom;
      float particle_z_shrinking_factor;
