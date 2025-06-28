@@ -162,6 +162,7 @@ void set_seed(int id) {
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
+        set_seed(id);
 
         if (id >= state.particle_count) {
             return;
@@ -173,6 +174,13 @@ void set_seed(int id) {
         int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int bin_index = atomicAdd(particle_bins[index], -1);
+
+        if (ubo.params.randomize != 0) {
+            vec3 world = vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
+            p.pos = vec3(random(), random(), random()) * world;
+            p.type_index = randuint() % ubo.params.particle_type_count;
+            p.vel = vec3(random(), random(), random()) * 1000;
+        }
 
         particles_back[bin_index - 1] = p;
     }

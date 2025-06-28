@@ -524,6 +524,7 @@ pub const ResourceManager = struct {
             zoom: f32 = 1.0,
             particle_z_shrinking_factor: f32 = 0.7,
             friction: f32,
+            randomize: u32 = 0,
             particle_type_count: u32 = 0,
             particle_count: u32 = 0,
             spawn_count: u32,
@@ -538,7 +539,7 @@ pub const ResourceManager = struct {
 
             _pad0: u32 = 0,
             _pad1: u32 = 0,
-            _pad2: u32 = 0,
+            // _pad2: u32 = 0,
         };
 
         fn from(
@@ -557,6 +558,7 @@ pub const ResourceManager = struct {
             state.params.spawn_count = state.params.particle_count - particle_count;
             state.params.friction = @exp(-state.friction * state.params.delta);
             state.params.particle_type_count = state.particle_type_count;
+            state.params.randomize = @intCast(@intFromBool(state.randomize));
 
             // cap requested world size's z coord.
             state.requested_world_size.z = @min(state.requested_world_size.z, state.bin_size * state.bin_buf_size_z_max);
@@ -1085,6 +1087,7 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
+    randomize: bool = false,
     steps_per_frame: u32 = 2,
     max_particle_count: u32 = 400000,
     max_particle_type_count: u32 = 10,
@@ -1161,6 +1164,8 @@ pub const AppState = struct {
             pf.* = std.mem.zeroes(@TypeOf(pf.*));
             pf.attraction_strength = frng.next();
         }
+
+        self.randomize = true;
     }
 
     pub fn tick(self: *@This(), engine: *Engine, app: *App) !void {
@@ -1168,6 +1173,8 @@ pub const AppState = struct {
         defer app.telemetry.end_sample();
 
         defer _ = self.arena.reset(.retain_capacity);
+
+        defer self.randomize = false;
 
         self.ticker.tick_real();
         engine.window.tick();

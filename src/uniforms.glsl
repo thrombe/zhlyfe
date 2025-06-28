@@ -39,6 +39,7 @@
      float zoom;
      float particle_z_shrinking_factor;
      float friction;
+     uint randomize;
      uint particle_type_count;
      uint particle_count;
      uint spawn_count;
@@ -52,7 +53,6 @@
      int world_size_z;
      uint _pad0;
      uint _pad1;
-     uint _pad2;
  };
 
  struct PushConstants {

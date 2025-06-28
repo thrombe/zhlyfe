@@ -37,6 +37,10 @@ float random() {
     return fhash(seed++);
 }
 
+uint randuint() {
+    return hash(seed++);
+}
+
 vec3 random_normal() {
     vec2 r = vec2(6.28318530718 * random(), acos(2.0 * random() - 1.0));
     vec2 c = cos(r), s = sin(r);
