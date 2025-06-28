@@ -295,7 +295,7 @@ void set_seed(int id) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        z_factor = abs(p.pos.z - ubo.params.world_size_z * 0.5) / (ubo.params.world_size_z * 0.5);
+        z_factor = abs(p.pos.z - ubo.params.world_size_z * 0.5) / max(ubo.params.world_size_z * 0.5, 1);
         f32 z_shrink = (1.0 - ubo.params.particle_z_shrinking_factor) + z_factor * ubo.params.particle_z_shrinking_factor;
         z_shrink = clamp(z_shrink, 0, 1);
 
