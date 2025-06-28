@@ -279,6 +279,7 @@ void set_seed(int id) {
 #ifdef RENDER_VERT_PASS
     layout(location = 0) out vec4 vcolor;
     layout(location = 1) out vec2 vuv;
+    layout(location = 2) out f32 z_factor;
     void main() {
         int particle_index = gl_VertexIndex / 6;
         int vert_index = gl_VertexIndex % 6;
@@ -292,8 +293,8 @@ void set_seed(int id) {
         vec2 mres = vec2(ubo.frame.monitor_width, ubo.frame.monitor_height);
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
-        f32 z_shrink = abs(p.pos.z - ubo.params.world_size_z * 0.5) / (ubo.params.world_size_z * 0.5);
-        z_shrink = (1.0 - ubo.params.particle_z_shrinking_factor) + z_shrink * ubo.params.particle_z_shrinking_factor;
+        z_factor = abs(p.pos.z - ubo.params.world_size_z * 0.5) / (ubo.params.world_size_z * 0.5);
+        f32 z_shrink = (1.0 - ubo.params.particle_z_shrinking_factor) + z_factor * ubo.params.particle_z_shrinking_factor;
         z_shrink = clamp(z_shrink, 0, 1);
 
         vec2 pos = p.pos.xy + ubo.camera.eye.xy;
@@ -312,13 +313,14 @@ void set_seed(int id) {
 #ifdef RENDER_FRAG_PASS
     layout(location = 0) in vec4 vcolor;
     layout(location = 1) in vec2 vuv;
+    layout(location = 2) in f32 z_factor;
     layout(location = 0) out vec4 fcolor;
     void main() {
         float zoom = ubo.params.zoom;
         float distanceFromCenter = length(vuv.xy - 0.5);
-        float mask = 1.0 - smoothstep(0.5 - 0.1/zoom, 0.5, distanceFromCenter);
+        float mask = 1.0 - smoothstep(0.5 - z_factor * 1.0 - 0.1/zoom, 0.5, distanceFromCenter);
         // mask = pow(1.0 - distanceFromCenter, 4.5) * mask;
-        fcolor = vec4(vcolor.xyz, vcolor.a * mask);
+        fcolor = vec4(vcolor.xyz, vcolor.a * mask * (0.4 +  0.6 * (1.0 - z_factor)));
     }
 #endif // RENDER_FRAG_PASS
 
