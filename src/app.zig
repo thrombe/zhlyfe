@@ -1334,6 +1334,21 @@ pub const GuiState = struct {
         c.ImGui_Text("physics acctime/step: %.3f", state.ticker.simulation.acctime_f / state.ticker.simulation.step_f);
         c.ImGui_Text("particle count: %d", state.params.particle_count);
 
+        if (c.ImGui_Button("randomize")) {
+            const zrng = math.Rng.init(state.rng.random()).with2(.{ .min = 0.1, .max = 1.0 });
+
+            for (app.resources.particle_types) |*pt| {
+                const color = Vec3.random(&zrng);
+                pt.* = .{ .color = color.normalize().withw(1.0), .visual_radius = 5 };
+            }
+
+            const frng = math.Rng.init(state.rng.random()).with2(.{ .min = -5, .max = 20 });
+            for (app.resources.particle_force_matrix) |*pf| {
+                pf.* = std.mem.zeroes(@TypeOf(pf.*));
+                pf.attraction_strength = frng.next();
+            }
+        }
+
         {
             c.ImGui_PushID("particle_types");
             defer c.ImGui_PopID();
