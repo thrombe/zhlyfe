@@ -506,6 +506,14 @@ pub const ResourceManager = struct {
     };
     pub const DrawCall = vk.DrawIndexedIndirectCommand;
 
+    pub const PushRandSeed = extern struct {
+        seed: i32,
+
+        _pad0: u32 = 0,
+        _pad1: u32 = 0,
+        _pad2: u32 = 0,
+    };
+
     pub const PushConstants = extern struct {
         reduce_step: i32,
 
@@ -528,7 +536,7 @@ pub const ResourceManager = struct {
             particle_z_shrinking_factor: f32 = 0.7,
             particle_z_blur_factor: f32 = 0.27,
             friction: f32,
-            entropy: f32 = 0.1,
+            entropy: f32 = 0.0,
             collision_strength_scale: f32 = 96,
             attraction_strength_scale: f32 = 27,
             max_attraction_factor: f32 = 27,
@@ -676,6 +684,7 @@ pub const RendererState = struct {
         try gen.add_struct("ParticleForce", ResourceManager.ParticleForce);
         try gen.add_struct("Particle", ResourceManager.Particle);
         try gen.add_struct("Params", ResourceManager.Uniforms.Params);
+        try gen.add_struct("PushRandSeed", ResourceManager.PushRandSeed);
         try gen.add_struct("PushConstants", ResourceManager.PushConstants);
         try gen.add_struct("Uniforms", ResourceManager.Uniforms);
         try gen.add_enum("_bind", ResourceManager.UniformBinds);
@@ -903,6 +912,11 @@ pub const RendererState = struct {
         self.pipelines.particle_binning = try ComputePipeline.new(device, .{
             .shader = self.stages.shaders.map.get("particle_binning").?.code,
             .desc_set_layouts = &.{desc_set.layout},
+            .push_constant_ranges = &[_]vk.PushConstantRange{.{
+                .stage_flags = .{ .compute_bit = true },
+                .offset = 0,
+                .size = @sizeOf(ResourceManager.PushRandSeed),
+            }},
         });
 
         if (initialized) {
@@ -988,11 +1002,14 @@ pub const RendererState = struct {
                 std.mem.swap(DescriptorSet, &self.descriptor_set, &self.descriptor_set_back);
             }
 
+            const seed = try alloc.create(ResourceManager.PushRandSeed);
+            seed.seed = @bitCast(cast(u32, @rem(app_state.rng.next(), std.math.maxInt(u32))));
             // bin particles
             cmdbuf.bindCompute(device, .{
                 .pipeline = self.pipelines.particle_binning,
                 .desc_set = self.descriptor_set.set,
             });
+            cmdbuf.push_constants(device, self.pipelines.particle_binning.layout, std.mem.asBytes(seed), .{ .compute_bit = true });
             cmdbuf.dispatch(device, .{ .x = math.divide_roof(app_state.params.particle_count, 64) });
             cmdbuf.memBarrier(device, .{});
 

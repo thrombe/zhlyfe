@@ -63,6 +63,13 @@
      int world_size_z;
  };
 
+ struct PushRandSeed {
+     int seed;
+     uint _pad0;
+     uint _pad1;
+     uint _pad2;
+ };
+
  struct PushConstants {
      int reduce_step;
      uint _pad0;

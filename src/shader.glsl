@@ -71,7 +71,7 @@ void set_seed(int id) {
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
-        set_seed(id ^ atomicAdd(state.seed_id, 1));
+        set_seed(id);
 
         if (id == 0) {
             int count = int(state.particle_count);
@@ -160,10 +160,14 @@ void set_seed(int id) {
 #endif // BIN_PREFIX_SUM_PASS
 
 #ifdef PARTICLE_BINNING_PASS
+    layout(push_constant) uniform PushConstantsUniform {
+        PushRandSeed push;
+    };
+
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
-        set_seed(id ^ atomicAdd(state.seed_id, 1));
+        set_seed(id ^ push.seed);
 
         if (id >= state.particle_count) {
             return;
@@ -208,7 +212,7 @@ void set_seed(int id) {
     layout (local_size_x = 8, local_size_y = 8) in;
     void main() {
         int id = global_id;
-        set_seed(id ^ atomicAdd(state.seed_id, 1));
+        set_seed(id);
 
         if (id >= state.particle_count) {
             return;
