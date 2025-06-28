@@ -525,7 +525,8 @@ pub const ResourceManager = struct {
             particle_z_shrinking_factor: f32 = 0.7,
             particle_z_blur_factor: f32 = 0.27,
             friction: f32,
-            randomize: u32 = 0,
+            randomize_particle_types: u32 = 0,
+            randomize_particle_attrs: u32 = 0,
             particle_type_count: u32 = 0,
             particle_count: u32 = 0,
             spawn_count: u32,
@@ -538,7 +539,7 @@ pub const ResourceManager = struct {
             world_size_y: i32,
             world_size_z: i32,
 
-            _pad0: u32 = 0,
+            // _pad0: u32 = 0,
             // _pad1: u32 = 0,
             // _pad2: u32 = 0,
         };
@@ -559,7 +560,8 @@ pub const ResourceManager = struct {
             state.params.spawn_count = state.params.particle_count - particle_count;
             state.params.friction = @exp(-state.friction * state.params.delta);
             state.params.particle_type_count = state.particle_type_count;
-            state.params.randomize = @intCast(@intFromBool(state.randomize));
+            state.params.randomize_particle_types = @intCast(@intFromBool(state.randomize.particle_types));
+            state.params.randomize_particle_attrs = @intCast(@intFromBool(state.randomize.particle_attrs));
 
             // cap requested world size's z coord.
             state.requested_world_size.z = @min(state.requested_world_size.z, state.bin_size * state.bin_buf_size_z_max);
@@ -1088,7 +1090,12 @@ pub const AppState = struct {
     shader_fuse: Fuse = .{},
     focus: bool = false,
 
-    randomize: bool = false,
+    randomize: struct {
+        particle_colors: bool = false,
+        particle_forces: bool = false,
+        particle_types: bool = false,
+        particle_attrs: bool = false,
+    } = .{},
     steps_per_frame: u32 = 2,
     max_particle_count: u32 = 400000,
     max_particle_type_count: u32 = 10,
@@ -1133,7 +1140,10 @@ pub const AppState = struct {
             .arena = std.heap.ArenaAllocator.init(allocator.*),
         };
 
-        this.randomize_particles(app);
+        this.randomize_particle_forces(app);
+        this.randomize_particle_colors(app);
+        this.randomize_particle_types(app);
+        this.randomize_particle_attrs(app);
 
         return this;
     }
@@ -1152,7 +1162,17 @@ pub const AppState = struct {
         _ = self.cmdbuf_fuse.fuse();
     }
 
-    fn randomize_particles(self: *@This(), app: *App) void {
+    fn randomize_particle_forces(self: *@This(), app: *App) void {
+        const zrng = math.Rng.init(self.rng.random()).with2(.{ .min = -5, .max = 20 });
+        for (app.resources.particle_force_matrix) |*pf| {
+            pf.* = std.mem.zeroes(@TypeOf(pf.*));
+            pf.attraction_strength = zrng.next();
+        }
+
+        self.randomize.particle_forces = true;
+    }
+
+    fn randomize_particle_colors(self: *@This(), app: *App) void {
         const zrng = math.Rng.init(self.rng.random()).with2(.{ .min = 0.1, .max = 1.0 });
 
         for (app.resources.particle_types) |*pt| {
@@ -1160,13 +1180,17 @@ pub const AppState = struct {
             pt.* = .{ .color = color.normalize().withw(1.0), .particle_scale = 0.5 };
         }
 
-        const frng = math.Rng.init(self.rng.random()).with2(.{ .min = -5, .max = 20 });
-        for (app.resources.particle_force_matrix) |*pf| {
-            pf.* = std.mem.zeroes(@TypeOf(pf.*));
-            pf.attraction_strength = frng.next();
-        }
+        self.randomize.particle_colors = true;
+    }
 
-        self.randomize = true;
+    fn randomize_particle_types(self: *@This(), app: *App) void {
+        _ = app;
+        self.randomize.particle_types = true;
+    }
+
+    fn randomize_particle_attrs(self: *@This(), app: *App) void {
+        _ = app;
+        self.randomize.particle_attrs = true;
     }
 
     pub fn tick(self: *@This(), engine: *Engine, app: *App) !void {
@@ -1175,7 +1199,7 @@ pub const AppState = struct {
 
         defer _ = self.arena.reset(.retain_capacity);
 
-        defer self.randomize = false;
+        defer self.randomize = .{};
 
         self.ticker.tick_real();
         engine.window.tick();
@@ -1349,7 +1373,23 @@ pub const GuiState = struct {
         c.ImGui_Text("particle count: %d", state.params.particle_count);
 
         if (c.ImGui_Button("randomize")) {
-            state.randomize_particles(app);
+            state.randomize_particle_forces(app);
+            state.randomize_particle_colors(app);
+            state.randomize_particle_types(app);
+            state.randomize_particle_attrs(app);
+        }
+
+        if (c.ImGui_Button("randomize particle forces")) {
+            state.randomize_particle_forces(app);
+            state.randomize_particle_types(app);
+        }
+
+        if (c.ImGui_Button("randomize particle colors")) {
+            state.randomize_particle_colors(app);
+        }
+
+        if (c.ImGui_Button("randomize particle attrs")) {
+            state.randomize_particle_attrs(app);
         }
 
         {

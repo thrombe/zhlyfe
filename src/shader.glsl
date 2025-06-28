@@ -175,11 +175,13 @@ void set_seed(int id) {
 
         int bin_index = atomicAdd(particle_bins[index], -1);
 
-        if (ubo.params.randomize != 0) {
+        if (ubo.params.randomize_particle_types != 0) {
+            p.type_index = randuint() % ubo.params.particle_type_count;
+        }
+        if (ubo.params.randomize_particle_attrs != 0) {
             vec3 world = vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
             p.pos = vec3(random(), random(), random()) * world;
-            p.type_index = randuint() % ubo.params.particle_type_count;
-            p.vel = vec3(random(), random(), random()) * 1000;
+            p.vel = (vec3(random(), random(), random()) - 0.5) * 2000;
         }
 
         particles_back[bin_index - 1] = p;
