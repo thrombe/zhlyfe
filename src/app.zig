@@ -522,6 +522,7 @@ pub const ResourceManager = struct {
             particle_size: u32 = 16,
             grid_size: u32 = 32,
             zoom: f32 = 1.0,
+            particle_z_shrinking_factor: f32 = 0.7,
             friction: f32,
             particle_type_count: u32 = 0,
             particle_count: u32 = 0,
@@ -535,9 +536,9 @@ pub const ResourceManager = struct {
             world_size_y: i32,
             world_size_z: i32,
 
-            // _pad0: u32 = 0,
-            // _pad1: u32 = 0,
-            // _pad2: u32 = 0,
+            _pad0: u32 = 0,
+            _pad1: u32 = 0,
+            _pad2: u32 = 0,
         };
 
         fn from(
@@ -1313,6 +1314,7 @@ pub const GuiState = struct {
         reset = c.ImGui_SliderInt("spawn count", @ptrCast(&state.spawn_count), 0, 10000) or reset;
         _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0.001, 2.0);
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
+        _ = c.ImGui_SliderFloat("particle_z_shrinking_factor", @ptrCast(&state.params.particle_z_shrinking_factor), 0, 1);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
         _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), 0, state.bin_size * state.bin_buf_size_z_max);

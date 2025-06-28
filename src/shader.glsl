@@ -285,7 +285,7 @@ void set_seed(int id) {
         vec2 wres = vec2(ubo.frame.width, ubo.frame.height);
 
         vec2 pos = p.pos.xy + ubo.camera.eye.xy;
-        pos += vpos * 0.5 * particle_size * clamp(0.5 + 0.5 * p.pos.z / max(ubo.params.world_size_z, 1), 0, 1);
+        pos += vpos * 0.5 * particle_size * clamp(1.0 - ubo.params.particle_z_shrinking_factor * p.pos.z / max(ubo.params.world_size_z, 1), 0, 1);
         pos /= mres; // world space to 0..1
         pos *= mres/wres; // 0..1 scaled wrt window size
         pos *= zoom;
