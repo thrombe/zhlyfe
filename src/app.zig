@@ -523,6 +523,7 @@ pub const ResourceManager = struct {
             grid_size: u32 = 32,
             zoom: f32 = 1.0,
             particle_z_shrinking_factor: f32 = 0.7,
+            particle_z_blur_factor: f32 = 0.27,
             friction: f32,
             randomize: u32 = 0,
             particle_type_count: u32 = 0,
@@ -538,7 +539,7 @@ pub const ResourceManager = struct {
             world_size_z: i32,
 
             _pad0: u32 = 0,
-            _pad1: u32 = 0,
+            // _pad1: u32 = 0,
             // _pad2: u32 = 0,
         };
 
@@ -1327,6 +1328,7 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderFloat("zoom", @ptrCast(&state.params.zoom), 0.001, 2.0);
         _ = c.ImGui_SliderInt("particle size", @ptrCast(&state.params.particle_size), 1, 100);
         _ = c.ImGui_SliderFloat("particle_z_shrinking_factor", @ptrCast(&state.params.particle_z_shrinking_factor), 0, 1);
+        _ = c.ImGui_SliderFloat("particle_z_blur_factor", @ptrCast(&state.params.particle_z_blur_factor), 0, 2);
         _ = c.ImGui_SliderInt("grid size", @ptrCast(&state.params.grid_size), 1, 100);
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
         _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), 0, state.bin_size * state.bin_buf_size_z_max);

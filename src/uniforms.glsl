@@ -38,6 +38,7 @@
      uint grid_size;
      float zoom;
      float particle_z_shrinking_factor;
+     float particle_z_blur_factor;
      float friction;
      uint randomize;
      uint particle_type_count;
@@ -52,7 +53,6 @@
      int world_size_y;
      int world_size_z;
      uint _pad0;
-     uint _pad1;
  };
 
  struct PushConstants {

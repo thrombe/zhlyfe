@@ -318,7 +318,7 @@ void set_seed(int id) {
     void main() {
         float zoom = ubo.params.zoom;
         float distanceFromCenter = length(vuv.xy - 0.5);
-        float mask = 1.0 - smoothstep(0.5 - z_factor * 1.0 - 0.1/zoom, 0.5, distanceFromCenter);
+        float mask = 1.0 - smoothstep(0.5 - z_factor * ubo.params.particle_z_blur_factor - 0.1/zoom, 0.5, distanceFromCenter);
         // mask = pow(1.0 - distanceFromCenter, 4.5) * mask;
         fcolor = vec4(vcolor.xyz, vcolor.a * mask * (0.4 +  0.6 * (1.0 - z_factor)));
     }
