@@ -485,12 +485,13 @@ pub const ResourceManager = struct {
     pub const ParticleForce = extern struct {
         attraction_strength: f32,
         attraction_radius: f32,
+        attraction_peak_dist_factor: f32,
         collision_strength: f32,
         collision_radius: f32,
 
-        // _pad0: u32 = 0,
-        // _pad1: u32 = 0,
-        // _pad2: u32 = 0,
+        _pad0: u32 = 0,
+        _pad1: u32 = 0,
+        _pad2: u32 = 0,
     };
     pub const Particle = extern struct {
         pos: math.Vec3,
@@ -525,6 +526,8 @@ pub const ResourceManager = struct {
             particle_z_shrinking_factor: f32 = 0.7,
             particle_z_blur_factor: f32 = 0.27,
             friction: f32,
+            collision_strength_scale: f32 = 150,
+            attraction_strength_scale: f32 = 40,
             randomize_particle_types: u32 = 0,
             randomize_particle_attrs: u32 = 0,
             particle_type_count: u32 = 0,
@@ -539,7 +542,7 @@ pub const ResourceManager = struct {
             world_size_y: i32,
             world_size_z: i32,
 
-            // _pad0: u32 = 0,
+            _pad0: u32 = 0,
             // _pad1: u32 = 0,
             // _pad2: u32 = 0,
         };
@@ -1163,21 +1166,36 @@ pub const AppState = struct {
     }
 
     fn randomize_particle_forces(self: *@This(), app: *App) void {
-        const zrng = math.Rng.init(self.rng.random()).with2(.{ .min = -5, .max = 20 });
+        const zrng = .{
+            .collision_strength = math.Rng.init(self.rng.random()).with2(.{ .min = 0.7, .max = 1 }),
+            .collision_radius = math.Rng.init(self.rng.random()).with2(.{ .min = 0.1, .max = 0.35 }),
+            .attraction_strength = math.Rng.init(self.rng.random()).with2(.{ .min = 0.3, .max = 1, .flip_sign = true }),
+            .attraction_radius = math.Rng.init(self.rng.random()).with2(.{ .min = 0.35, .max = 1 }),
+            .attraction_peak_dist_factor = math.Rng.init(self.rng.random()).with2(.{ .min = 0.35, .max = 0.1 }),
+        };
         for (app.resources.particle_force_matrix) |*pf| {
             pf.* = std.mem.zeroes(@TypeOf(pf.*));
-            pf.attraction_strength = zrng.next();
+            inline for (@typeInfo(@TypeOf(pf.*)).@"struct".fields) |f| {
+                if (comptime @hasField(@TypeOf(zrng), f.name)) {
+                    @field(pf, f.name) = @field(zrng, f.name).next();
+                }
+            }
         }
 
         self.randomize.particle_forces = true;
     }
 
     fn randomize_particle_colors(self: *@This(), app: *App) void {
-        const zrng = math.Rng.init(self.rng.random()).with2(.{ .min = 0.1, .max = 1.0 });
+        const zrng = .{
+            .color = math.Rng.init(self.rng.random()).with2(.{ .min = 0.1, .max = 1.0 }),
+            .particle_scale = math.Rng.init(self.rng.random()).with2(.{ .min = 0.4, .max = 0.6 }),
+        };
 
         for (app.resources.particle_types) |*pt| {
-            const color = Vec3.random(&zrng);
-            pt.* = .{ .color = color.normalize().withw(1.0), .particle_scale = 0.5 };
+            pt.* = .{
+                .color = Vec3.random(&zrng.color).normalize().withw(1.0),
+                .particle_scale = zrng.particle_scale.next(),
+            };
         }
 
         self.randomize.particle_colors = true;
@@ -1358,6 +1376,8 @@ pub const GuiState = struct {
         _ = c.ImGui_SliderInt("bin size", @ptrCast(&state.bin_size), 4, 200);
         _ = c.ImGui_SliderInt("bin buf size z", @ptrCast(&state.requested_world_size.z), 0, state.bin_size * state.bin_buf_size_z_max);
         reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 5.0) or reset;
+        _ = c.ImGui_SliderFloat("collision_strength_scale", @ptrCast(&state.params.collision_strength_scale), 0, 200);
+        _ = c.ImGui_SliderFloat("attraction_strength_scale", @ptrCast(&state.params.attraction_strength_scale), 0, 200);
 
         var sim_speed = state.ticker.speed.perc;
         if (c.ImGui_SliderFloat("simulation_speed", @ptrCast(&sim_speed), 0.0, 5.0)) {
@@ -1433,9 +1453,10 @@ pub const GuiState = struct {
     }
 
     fn editParticleForce(_: *@This(), e: *ResourceManager.ParticleForce) void {
-        _ = c.ImGui_SliderFloat("attraction_strength", &e.attraction_strength, -100, 100);
-        // _ = c.ImGui_SliderFloat("attraction_radius", &e.attraction_radius, 0, 128);
-        // _ = c.ImGui_SliderFloat("collision_strength", &e.collision_strength, -200, 200);
-        // _ = c.ImGui_SliderFloat("collision_radius", &e.collision_radius, 0, 128);
+        _ = c.ImGui_SliderFloat("attraction_strength", &e.attraction_strength, -1, 1);
+        _ = c.ImGui_SliderFloat("attraction_radius", &e.attraction_radius, 0, 1);
+        _ = c.ImGui_SliderFloat("attraction_peak_dist_factor", &e.attraction_peak_dist_factor, 0, 1);
+        _ = c.ImGui_SliderFloat("collision_strength", &e.collision_strength, -1, 1);
+        _ = c.ImGui_SliderFloat("collision_radius", &e.collision_radius, 0, 1);
     }
 };

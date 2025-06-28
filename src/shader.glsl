@@ -243,15 +243,18 @@ void set_seed(int id) {
 
                         dir /= dist;
 
-                        f32 a = 45;
-                        f32 b = ubo.params.bin_size / 2.0;
-                        f32 c = ubo.params.bin_size;
-                        if (dist < a) {
-                            pforce -= 140 * (1.0 - dist / a) * dir;
-                        } else if (dist < b) {
-                            pforce += forces.attraction_strength * ((dist - a) / (b - a)) * dir;
-                        } else if (dist < c) {
-                            pforce += forces.attraction_strength * (1.0 - (dist - b) / (c - b)) * dir;
+                        f32 bin_size = ubo.params.bin_size;
+                        f32 collision_r = forces.collision_radius * bin_size;
+                        f32 collision_s = forces.collision_strength * ubo.params.collision_strength_scale;
+                        f32 attraction_peak_r = forces.attraction_radius * forces.attraction_peak_dist_factor * bin_size;
+                        f32 attraction_r = forces.attraction_radius * (1.0 - forces.attraction_peak_dist_factor) * bin_size;
+                        f32 attraction_s = forces.attraction_strength * ubo.params.attraction_strength_scale;
+                        if (dist < collision_r) {
+                            pforce -= collision_s * (1.0 - dist / collision_r) * dir;
+                        } else if (dist < attraction_peak_r) {
+                            pforce += attraction_s * ((dist - collision_r) / (attraction_peak_r - collision_r)) * dir;
+                        } else if (dist < attraction_r) {
+                            pforce += attraction_s * (1.0 - (dist - attraction_peak_r) / (attraction_r - attraction_peak_r)) * dir;
                         }
                         // if (dist > 0.0) {
                         //     vec2 dir = (o.pos - p.pos) / dist;

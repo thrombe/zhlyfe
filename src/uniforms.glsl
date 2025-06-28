@@ -19,8 +19,12 @@
  struct ParticleForce {
      float attraction_strength;
      float attraction_radius;
+     float attraction_peak_dist_factor;
      float collision_strength;
      float collision_radius;
+     uint _pad0;
+     uint _pad1;
+     uint _pad2;
  };
 
  struct Particle {
@@ -40,6 +44,8 @@
      float particle_z_shrinking_factor;
      float particle_z_blur_factor;
      float friction;
+     float collision_strength_scale;
+     float attraction_strength_scale;
      uint randomize_particle_types;
      uint randomize_particle_attrs;
      uint particle_type_count;
@@ -53,6 +59,7 @@
      int world_size_x;
      int world_size_y;
      int world_size_z;
+     uint _pad0;
  };
 
  struct PushConstants {
