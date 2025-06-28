@@ -271,7 +271,7 @@ void set_seed(int id) {
         // pforce *= flen / (flen + 1);
         // fattract *= 1.0/log(flen + 1);
         // fattract *= pow(flen, 0.83) / max(flen, 1);
-        fattract *= min(flen, 45.0 * ubo.params.attraction_strength_scale)/max(flen, 1);
+        fattract *= min(flen, ubo.params.max_attraction_factor * ubo.params.attraction_strength_scale)/max(flen, 1);
 
         vec3 pforce = fcollide + fattract;
         p.vel *= ubo.params.friction;

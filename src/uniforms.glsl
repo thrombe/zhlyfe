@@ -46,6 +46,7 @@
      float friction;
      float collision_strength_scale;
      float attraction_strength_scale;
+     float max_attraction_factor;
      uint randomize_particle_types;
      uint randomize_particle_attrs;
      uint particle_type_count;

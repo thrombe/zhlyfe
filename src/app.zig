@@ -285,7 +285,7 @@ pub const ResourceManager = struct {
     particles_draw_call_buf: Buffer,
 
     pub fn init(engine: *Engine, pool: vk.CommandPool, v: struct {
-        num_particles: u32 = 500000,
+        num_particles: u32 = 100000,
         particle_type_count: u32 = 10,
     }) !@This() {
         const ctx = &engine.graphics;
@@ -526,8 +526,9 @@ pub const ResourceManager = struct {
             particle_z_shrinking_factor: f32 = 0.7,
             particle_z_blur_factor: f32 = 0.27,
             friction: f32,
-            collision_strength_scale: f32 = 150,
-            attraction_strength_scale: f32 = 40,
+            collision_strength_scale: f32 = 96,
+            attraction_strength_scale: f32 = 27,
+            max_attraction_factor: f32 = 27,
             randomize_particle_types: u32 = 0,
             randomize_particle_attrs: u32 = 0,
             particle_type_count: u32 = 0,
@@ -1100,15 +1101,14 @@ pub const AppState = struct {
         particle_attrs: bool = false,
     } = .{},
     steps_per_frame: u32 = 2,
-    max_particle_count: u32 = 400000,
+    max_particle_count: u32 = 100000,
     max_particle_type_count: u32 = 10,
-    particle_type_count: u32 = 3,
-    spawn_count: u32 = 10000,
+    particle_type_count: u32 = 5,
+    spawn_count: u32 = 15000,
     friction: f32 = 2.0,
-    bin_size: i32 = 96,
-    bin_buf_size_z: i32 = 1,
+    bin_size: i32 = 62,
     bin_buf_size_z_max: i32 = 5,
-    requested_world_size: math.Vec3T(i32) = .{ .x = 1800, .y = 1200, .z = 96 },
+    requested_world_size: math.Vec3T(i32) = .{ .x = 1800, .y = 1200, .z = 13 },
     params: ResourceManager.Uniforms.Params = .{
         .spawn_count = 0,
         .friction = 0,
@@ -1378,6 +1378,7 @@ pub const GuiState = struct {
         reset = c.ImGui_SliderFloat("friction", @ptrCast(&state.friction), 0.0, 5.0) or reset;
         _ = c.ImGui_SliderFloat("collision_strength_scale", @ptrCast(&state.params.collision_strength_scale), 0, 200);
         _ = c.ImGui_SliderFloat("attraction_strength_scale", @ptrCast(&state.params.attraction_strength_scale), 0, 200);
+        _ = c.ImGui_SliderFloat("max_attraction_factor", @ptrCast(&state.params.max_attraction_factor), 1, 200);
 
         var sim_speed = state.ticker.speed.perc;
         if (c.ImGui_SliderFloat("simulation_speed", @ptrCast(&sim_speed), 0.0, 5.0)) {
