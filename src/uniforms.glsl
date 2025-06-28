@@ -33,7 +33,7 @@
      uint type_index;
      float age;
      float exposure;
-     float activeness;
+     uint _pad0;
  };
 
  struct Params {

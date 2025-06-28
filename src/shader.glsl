@@ -176,8 +176,8 @@ void set_seed(int id) {
         f32 dist = 2.0 * length(p.pos - world / 2.0) / length(world);
         f32 particle_entropy = 0.0;
         particle_entropy += float(vel < 10.0) * 0.001 + float(vel > 20.0) * 0.001;
-        particle_entropy += pow(p.exposure, 1.0/3.0) * 0.0001;
-        particle_entropy += float(p.age > 1000.0) * 0.0006;
+        particle_entropy += sqrt(p.exposure) * 0.0001;
+        particle_entropy += float(p.age > 1000.0) * 0.0003;
         particle_entropy *= ubo.params.entropy;
 
         bool killed = false;
