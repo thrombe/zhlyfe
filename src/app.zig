@@ -1121,27 +1121,17 @@ pub const AppState = struct {
         const mouse = window.poll_mouse();
         const sze = try window.get_res();
 
-        var rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
-        const zrng = math.Rng.init(rng.random()).with2(.{ .min = 0.1, .max = 1.0 });
-
-        for (app.resources.particle_types) |*pt| {
-            const color = Vec3.random(&zrng);
-            pt.* = .{ .color = color.normalize().withw(1.0), .visual_radius = 5 };
-        }
-
-        const frng = math.Rng.init(rng.random()).with2(.{ .min = -5, .max = 20 });
-        for (app.resources.particle_force_matrix) |*pf| {
-            pf.* = std.mem.zeroes(@TypeOf(pf.*));
-            pf.attraction_strength = frng.next();
-        }
-
-        return .{
+        var this = @This(){
             .ticker = try .init(),
             .monitor_rez = .{ .width = sze.width, .height = sze.height },
             .mouse = .{ .x = mouse.x, .y = mouse.y, .left = mouse.left },
-            .rng = rng,
+            .rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp())),
             .arena = std.heap.ArenaAllocator.init(allocator.*),
         };
+
+        this.randomize_particles(app);
+
+        return this;
     }
 
     pub fn deinit(self: *@This()) void {
@@ -1156,6 +1146,21 @@ pub const AppState = struct {
         _ = self.resize_fuse.fuse();
         _ = self.shader_fuse.fuse();
         _ = self.cmdbuf_fuse.fuse();
+    }
+
+    fn randomize_particles(self: *@This(), app: *App) void {
+        const zrng = math.Rng.init(self.rng.random()).with2(.{ .min = 0.1, .max = 1.0 });
+
+        for (app.resources.particle_types) |*pt| {
+            const color = Vec3.random(&zrng);
+            pt.* = .{ .color = color.normalize().withw(1.0), .visual_radius = 5 };
+        }
+
+        const frng = math.Rng.init(self.rng.random()).with2(.{ .min = -5, .max = 20 });
+        for (app.resources.particle_force_matrix) |*pf| {
+            pf.* = std.mem.zeroes(@TypeOf(pf.*));
+            pf.attraction_strength = frng.next();
+        }
     }
 
     pub fn tick(self: *@This(), engine: *Engine, app: *App) !void {
@@ -1335,18 +1340,7 @@ pub const GuiState = struct {
         c.ImGui_Text("particle count: %d", state.params.particle_count);
 
         if (c.ImGui_Button("randomize")) {
-            const zrng = math.Rng.init(state.rng.random()).with2(.{ .min = 0.1, .max = 1.0 });
-
-            for (app.resources.particle_types) |*pt| {
-                const color = Vec3.random(&zrng);
-                pt.* = .{ .color = color.normalize().withw(1.0), .visual_radius = 5 };
-            }
-
-            const frng = math.Rng.init(state.rng.random()).with2(.{ .min = -5, .max = 20 });
-            for (app.resources.particle_force_matrix) |*pf| {
-                pf.* = std.mem.zeroes(@TypeOf(pf.*));
-                pf.attraction_strength = frng.next();
-            }
+            state.randomize_particles(app);
         }
 
         {
