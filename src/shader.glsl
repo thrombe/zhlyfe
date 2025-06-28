@@ -170,11 +170,6 @@ void set_seed(int id) {
 
         Particle p = particles[id];
 
-        ivec3 pos = ivec3(p.pos / ubo.params.bin_size);
-        int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
-
-        int bin_index = atomicAdd(particle_bins[index], -1);
-
         if (ubo.params.randomize_particle_types != 0) {
             p.type_index = randuint() % ubo.params.particle_type_count;
         }
@@ -183,6 +178,11 @@ void set_seed(int id) {
             p.pos = vec3(random(), random(), random()) * world;
             p.vel = (vec3(random(), random(), random()) - 0.5) * 2000;
         }
+
+        ivec3 pos = ivec3(p.pos / ubo.params.bin_size);
+        int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
+
+        int bin_index = atomicAdd(particle_bins[index], -1);
 
         particles_back[bin_index - 1] = p;
     }
