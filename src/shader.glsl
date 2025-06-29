@@ -167,37 +167,52 @@ void set_seed(int id) {
         if (id >= state.particle_count) {
             return;
         }
-        vec3 world = vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
 
         Particle p = particles[id];
-
-        f32 vel = length(p.vel);
-        f32 dist = 2.0 * length(p.pos - world / 2.0) / length(world);
-        f32 particle_entropy = 0.0;
-        particle_entropy += float(vel < 10.0) * 0.001 + float(vel > 20.0) * 0.001;
-        particle_entropy += sqrt(p.exposure) * 0.0001;
-        particle_entropy += float(p.age > 1000.0) * 0.0003;
-        particle_entropy *= ubo.params.entropy;
-
-        bool killed = false;
-        if (particle_entropy > random()) {
-            killed = true;
-        }
-
-        if (ubo.params.randomize_particle_types != 0 || killed) {
-            p.type_index = randuint() % ubo.params.particle_type_count;
-            p.age = 0.0;
-            p.exposure = 0.0;
-        }
-        if (ubo.params.randomize_particle_attrs != 0 || killed) {
-            p.pos = vec3(random(), random(), random()) * world;
-            p.vel = (vec3(random(), random(), random()) - 0.5) * mix(2000, 2, killed);
-        }
 
         ivec3 pos = ivec3(p.pos / ubo.params.bin_size);
         int index = clamp(pos.z * ubo.params.bin_buf_size_y * ubo.params.bin_buf_size_x + pos.y * ubo.params.bin_buf_size_x + pos.x, 0, ubo.params.bin_buf_size);
 
         int bin_index = atomicAdd(particle_bins[index], -1);
+
+        // NOTE: do this stuff *after* we have the bin index. we need to respect the prefix sum bin data to get useful index values.
+        //  this is mostly implemented as a hack. after resetting/killing a particle - it likely won't interact with anything until the next frame
+        //  but that is fine if we save an entire pass (+ particle buffer copy) especially for this, which would be the proper way to implement this.
+        {
+            // entropy calculation
+            {
+                vec3 world = vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
+                f32 vel = length(p.vel);
+                f32 dist = 2.0 * length(p.pos - world / 2.0) / length(world);
+                f32 particle_entropy = 0.0;
+                particle_entropy += float(vel < 10.0) * 0.001 + float(vel > 20.0) * 0.001;
+                particle_entropy += sqrt(p.exposure) * 0.0001;
+                particle_entropy += float(p.age > 1000.0) * 0.0003;
+                particle_entropy *= ubo.params.entropy;
+
+                if (particle_entropy > random()) {
+                    p.pos = vec3(random(), random(), random()) * world;
+                    p.vel = (vec3(random(), random(), random()) - 0.5) * 2;
+                    p.type_index = randuint() % ubo.params.particle_type_count;
+                    p.age = 0.0;
+                    p.exposure = 0.0;
+                }
+            }
+
+            // randomize particles
+            {
+                if (ubo.params.randomize_particle_types != 0) {
+                    p.type_index = randuint() % ubo.params.particle_type_count;
+                    p.age = 0.0;
+                    p.exposure = 0.0;
+                }
+                if (ubo.params.randomize_particle_attrs != 0) {
+                    vec3 world = vec3(float(ubo.params.world_size_x), float(ubo.params.world_size_y), float(ubo.params.world_size_z));
+                    p.pos = vec3(random(), random(), random()) * world;
+                    p.vel = (vec3(random(), random(), random()) - 0.5) * 2000;
+                }
+            }
+        }
 
         particles_back[bin_index - 1] = p;
     }
