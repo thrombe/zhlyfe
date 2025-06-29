@@ -529,7 +529,7 @@ pub const ResourceManager = struct {
             particle_z_shrinking_factor: f32 = 0.7,
             particle_z_blur_factor: f32 = 0.27,
             friction: f32,
-            entropy: f32 = 0.0,
+            entropy: f32 = 0.1,
             collision_strength_scale: f32 = 96,
             attraction_strength_scale: f32 = 27,
             max_attraction_factor: f32 = 27,
