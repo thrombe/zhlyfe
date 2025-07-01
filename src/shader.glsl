@@ -190,6 +190,9 @@ void set_seed(int id) {
                 particle_entropy += float(p.age > 1000.0) * 0.0003;
                 particle_entropy *= ubo.params.entropy;
 
+                // framerate and step independent entropy
+                particle_entropy *= ubo.params.delta * 100.0;
+
                 if (particle_entropy > random()) {
                     p.pos = vec3(random(), random(), random()) * world;
                     p.vel = (vec3(random(), random(), random()) - 0.5) * 2;
@@ -315,8 +318,8 @@ void set_seed(int id) {
         // prevents position blow up
         p.pos = clamp(p.pos, vec3(0.0), world);
 
-        p.age += 1.0;
-        p.exposure = exposure;
+        p.age += 100.0 * ubo.params.delta;
+        p.exposure = exposure * 100.0 * ubo.params.delta;
 
         particles[id] = p;
     }
