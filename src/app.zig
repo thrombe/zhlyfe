@@ -349,7 +349,7 @@ pub const ResourceManager = struct {
         errdefer particle_bins_back.deinit(device);
 
         var particle_bins = try Buffer.new(ctx, .{
-            .size = @sizeOf(i32) * (1 + res.width * res.height),
+            .size = @sizeOf(i32) * (1 + res.width * res.height) * 5,
             .usage = .{ .storage_buffer_bit = true },
         });
         errdefer particle_bins.deinit(device);
